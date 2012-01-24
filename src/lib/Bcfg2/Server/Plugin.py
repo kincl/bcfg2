@@ -33,8 +33,9 @@ encoding = encparse['encoding']
 # grab default metadata info from bcfg2.conf
 opts = {'owner': Bcfg2.Options.MDATA_OWNER,
         'group': Bcfg2.Options.MDATA_GROUP,
-        'important': Bcfg2.Options.MDATA_IMPORTANT,
         'perms': Bcfg2.Options.MDATA_PERMS,
+        'secontext': Bcfg2.Options.MDATA_SECONTEXT,
+        'important': Bcfg2.Options.MDATA_IMPORTANT,
         'paranoid': Bcfg2.Options.MDATA_PARANOID,
         'sensitive': Bcfg2.Options.MDATA_SENSITIVE}
 mdata_setup = Bcfg2.Options.OptionParser(opts)
@@ -53,6 +54,7 @@ info_regex = re.compile( \
     'owner:(\s)*(?P<owner>\S+)|' +
     'paranoid:(\s)*(?P<paranoid>\S+)|' +
     'perms:(\s)*(?P<perms>\w+)|' +
+    'secontext:(\s)*(?P<secontext>\S+)|' +
     'sensitive:(\s)*(?P<sensitive>\S+)|')
 
 
