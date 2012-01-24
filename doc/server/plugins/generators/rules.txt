@@ -229,37 +229,41 @@ Attributes common to all Path tags:
 device
 ^^^^^^
 
-+----------+---------------------+-------------------+
-| Name     | Description         | Values            |
-+==========+=====================+===================+
-| dev_type | Type of device      | (block|char|fifo) |
-+----------+---------------------+-------------------+
-| owner    | Device owner        | String            |
-+----------+---------------------+-------------------+
-| group    | Device group        | String            |
-+----------+---------------------+-------------------+
-| major    | Major number (block | integer           |
-|          | or char devices)    |                   |
-+----------+---------------------+-------------------+
-| minor    | Minor number (block | integer           |
-|          | or char devices)    |                   |
-+----------+---------------------+-------------------+
++-----------+---------------------+-------------------+
+| Name      | Description         | Values            |
++===========+=====================+===================+
+| dev_type  | Type of device      | (block|char|fifo) |
++-----------+---------------------+-------------------+
+| owner     | Device owner        | String            |
++-----------+---------------------+-------------------+
+| group     | Device group        | String            |
++-----------+---------------------+-------------------+
+| secontext | SELinux context     | String            |
++-----------+---------------------+-------------------+
+| major     | Major number (block | integer           |
+|           | or char devices)    |                   |
++-----------+---------------------+-------------------+
+| minor     | Minor number (block | integer           |
+|           | or char devices)    |                   |
++-----------+---------------------+-------------------+
 
 directory
 ^^^^^^^^^
 
-+-------+------------------------------+------------+
-| Name  | Description                  | Values     |
-+=======+==============================+============+
-| perms | Permissions of the directory | String     |
-+-------+------------------------------+------------+
-| owner | Owner of the directory       | String     |
-+-------+------------------------------+------------+
-| group | Group Owner of the directory | String     |
-+-------+------------------------------+------------+
-| prune | prune unspecified entries    | true|false |
-|       | from the Directory           |            |
-+-------+------------------------------+------------+
++-----------+------------------------------+------------+
+| Name      | Description                  | Values     |
++===========+==============================+============+
+| perms     | Permissions of the directory | String     |
++-----------+------------------------------+------------+
+| owner     | Owner of the directory       | String     |
++-----------+------------------------------+------------+
+| group     | Group Owner of the directory | String     |
++-----------+------------------------------+------------+
+| secontext | SELinux context              | String     |
++-----------+------------------------------+------------+
+| prune     | prune unspecified entries    | true|false |
+|           | from the Directory           |            |
++-----------+------------------------------+------------+
 
 hardlink
 ^^^^^^^^
@@ -285,15 +289,17 @@ nonexistent
 permissions
 ^^^^^^^^^^^
 
-+-------+--------------------------+--------+
-| Name  | Description              | Values |
-+=======+==========================+========+
-| perms | Permissions of the file. | String |
-+-------+--------------------------+--------+
-| owner | Owner of the file.       | String |
-+-------+--------------------------+--------+
-| group | Group of the file.       | String |
-+-------+--------------------------+--------+
++-----------+--------------------------+--------+
+| Name      | Description              | Values |
++===========+==========================+========+
+| perms     | Permissions of the file. | String |
++-----------+--------------------------+--------+
+| owner     | Owner of the file.       | String |
++-----------+--------------------------+--------+
+| group     | Group of the file.       | String |
++-----------+--------------------------+--------+
+| secontext | SELinux context          | String |
++-----------+--------------------------+--------+
 
 symlink
 ^^^^^^^
