@@ -24,6 +24,7 @@
     <xsd:attribute type='xsd:string' name='owner' use='optional'/>
     <xsd:attribute type='xsd:string' name='paranoid' use='optional'/>
     <xsd:attribute type='xsd:string' name='perms' use='optional'/>
+    <xsd:attribute type="xsd:string" name="secontext" use="optional"/>
     <xsd:attribute type='xsd:string' name='prune' use='optional'/>
     <xsd:attribute type='xsd:string' name='recursive' use='optional'/>
     <xsd:attribute type='xsd:string' name='sensitive' use='optional'/>
