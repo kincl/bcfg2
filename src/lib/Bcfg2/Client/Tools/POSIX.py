@@ -20,7 +20,13 @@ import Bcfg2.Client.Tools
 import Bcfg2.Options
 from Bcfg2.Client import XML
 
-log = logging.getLogger('POSIX')
+log = logging.getLogger(__name__)
+
+try:
+    import selinux
+    has_selinux = True
+except ImportError:
+    has_selinux = False
 
 # map between dev_type attribute and stat constants
 device_map = {'block': stat.S_IFBLK,
@@ -92,6 +98,31 @@ def isString(strng, encoding):
         return False
 
 
+def secontextMatches(entry):
+    """ determine if the SELinux context of the file on disk matches
+    the desired context """
+    if not has_selinux:
+        # no selinux libraries
+        return True
+    
+    path = entry.get("path")
+    context = entry.get("secontext")
+    if context is None:
+        # no context listed
+        return True
+
+    if context == '__default__':
+        if selinux.getfilecon(entry.get('name'))[1] == \
+           selinux.matchpathcon(entry.get('name'), 0)[1]:
+            return True
+        else:
+            return False
+    elif selinux.getfilecon(entry.get('name'))[1] == targetContext:
+        return True
+    else:
+        return False
+
+
 class POSIX(Bcfg2.Client.Tools.Tool):
     """POSIX File support code."""
     name = 'POSIX'
@@ -141,69 +172,60 @@ class POSIX(Bcfg2.Client.Tools.Tool):
                 entry.set('current_group', str(ondisk[stat.ST_GID]))
             except (OSError, KeyError):
                 pass
+
+            if has_selinux:
+                try:
+                    entry.set('current_secontext',
+                              selinux.getfilecon(entry.get('name'))[1])
+                except (OSError, KeyError):
+                    pass
             entry.set('perms', str(oct(ondisk[stat.ST_MODE])[-4:]))
 
     def Verifydevice(self, entry, _):
         """Verify device entry."""
-        if entry.get('dev_type') == None or \
-           entry.get('owner') == None or \
-           entry.get('group') == None:
-            self.logger.error('Entry %s not completely specified. '
-                              'Try running bcfg2-lint.' % (entry.get('name')))
-            return False
         if entry.get('dev_type') in ['block', 'char']:
             # check if major/minor are properly specified
-            if entry.get('major') == None or \
-               entry.get('minor') == None:
+            if (entry.get('major') == None or
+                entry.get('minor') == None):
                 self.logger.error('Entry %s not completely specified. '
-                                  'Try running bcfg2-lint.' % (entry.get('name')))
+                                  'Try running bcfg2-lint.' %
+                                  (entry.get('name')))
                 return False
+
         try:
-            # check for file existence
-            filestat = os.stat(entry.get('name'))
+            ondisk = os.stat(path)
         except OSError:
             entry.set('current_exists', 'false')
             self.logger.debug("%s %s does not exist" %
-                              (entry.tag, entry.get('name')))
+                              (entry.tag, path))
             return False
 
-        try:
-            # attempt to verify device properties as specified in config
-            dev_type = entry.get('dev_type')
-            mode = calcPerms(device_map[dev_type],
-                             entry.get('mode', '0600'))
-            owner = normUid(entry)
-            group = normGid(entry)
-            if dev_type in ['block', 'char']:
-                # check for incompletely specified entries
-                if entry.get('major') == None or \
-                   entry.get('minor') == None:
-                    self.logger.error('Entry %s not completely specified. '
-                                      'Try running bcfg2-lint.' % (entry.get('name')))
-                    return False
-                major = int(entry.get('major'))
-                minor = int(entry.get('minor'))
-                if major == os.major(filestat.st_rdev) and \
-                   minor == os.minor(filestat.st_rdev) and \
-                   mode == filestat.st_mode and \
-                   owner == filestat.st_uid and \
-                   group == filestat.st_gid:
-                    return True
-                else:
-                    return False
-            elif dev_type == 'fifo' and \
-                 mode == filestat.st_mode and \
-                 owner == filestat.st_uid and \
-                 group == filestat.st_gid:
-                return True
-            else:
-                self.logger.info('Device properties for %s incorrect' % \
-                                 entry.get('name'))
-                return False
-        except OSError:
-            self.logger.debug("%s %s failed to verify" %
-                              (entry.tag, entry.get('name')))
-            return False
+        rv = self._verify_metadata(entry)
+        
+        # attempt to verify device properties as specified in config
+        dev_type = entry.get('dev_type')
+        if dev_type in ['block', 'char']:
+            major = int(entry.get('major'))
+            minor = int(entry.get('minor'))
+            if major != os.major(ondisk.st_rdev):
+                entry.set('current_mtime', mtime)
+                msg = ("Major number for device %s is incorrect. "
+                       "Current major is %s but should be %s" %
+                       (path, os.major(ondisk.st_rdev), major))
+                self.logger.debug(msg)
+                entry.set('qtext', entry.get('qtext') + "\n" + msg)
+                rv = False
+
+            if minor != os.minor(ondisk.st_rdev):
+                entry.set('current_mtime', mtime)
+                msg = ("Minor number for device %s is incorrect. "
+                       "Current minor is %s but should be %s" %
+                       (path, os.minor(ondisk.st_rdev), minor))
+                self.logger.debug(msg)
+                entry.set('qtext', entry.get('qtext') + "\n" + msg)
+                rv = False
+
+        return rv
 
     def Installdevice(self, entry):
         """Install device entries."""
@@ -255,40 +277,6 @@ class POSIX(Bcfg2.Client.Tools.Tool):
 
     def Verifydirectory(self, entry, modlist):
         """Verify Path type='directory' entry."""
-        if entry.get('perms') == None or \
-           entry.get('owner') == None or \
-           entry.get('group') == None:
-            self.logger.error("POSIX: Entry %s not completely specified. "
-                              "Try running bcfg2-lint." % (entry.get('name')))
-            return False
-        while len(entry.get('perms', '')) < 4:
-            entry.set('perms', '0' + entry.get('perms', ''))
-        try:
-            ondisk = os.stat(entry.get('name'))
-        except OSError:
-            entry.set('current_exists', 'false')
-            self.logger.info("POSIX: %s %s does not exist" %
-                              (entry.tag, entry.get('name')))
-            return False
-        try:
-            owner = str(ondisk[stat.ST_UID])
-            group = str(ondisk[stat.ST_GID])
-        except (OSError, KeyError):
-            self.logger.info("POSIX: User/Group resolution failed "
-                             "for path %s" % entry.get('name'))
-            owner = 'root'
-            group = '0'
-        finfo = os.stat(entry.get('name'))
-        perms = oct(finfo[stat.ST_MODE])[-4:]
-        if entry.get('mtime', '-1') != '-1':
-            mtime = str(finfo[stat.ST_MTIME])
-        else:
-            mtime = '-1'
-        pTrue = ((owner == str(normUid(entry))) and
-                 (group == str(normGid(entry))) and
-                 (perms == entry.get('perms')) and
-                 (mtime == entry.get('mtime', '-1')))
-
         pruneTrue = True
         ex_ents = []
         if entry.get('prune', 'false') == 'true' \
@@ -314,52 +302,7 @@ class POSIX(Bcfg2.Client.Tools.Tool):
                 ex_ents = []
                 pruneTrue = True
 
-        if not pTrue:
-            if owner != str(normUid(entry)):
-                entry.set('current_owner', owner)
-                self.logger.debug("%s %s ownership wrong" % \
-                                  (entry.tag, entry.get('name')))
-                nqtext = entry.get('qtext', '') + '\n'
-                nqtext += "%s owner wrong. is %s should be %s" % \
-                          (entry.get('name'), owner, entry.get('owner'))
-                entry.set('qtext', nqtext)
-            if group != str(normGid(entry)):
-                entry.set('current_group', group)
-                self.logger.debug("%s %s group wrong" % \
-                                  (entry.tag, entry.get('name')))
-                nqtext = entry.get('qtext', '') + '\n'
-                nqtext += "%s group is %s should be %s" % \
-                          (entry.get('name'), group, entry.get('group'))
-                entry.set('qtext', nqtext)
-            if perms != entry.get('perms'):
-                entry.set('current_perms', perms)
-                self.logger.debug("%s %s permissions are %s should be %s" %
-                                  (entry.tag,
-                                   entry.get('name'),
-                                   perms,
-                                   entry.get('perms')))
-                nqtext = entry.get('qtext', '') + '\n'
-                nqtext += "%s %s perms are %s should be %s" % \
-                          (entry.tag,
-                           entry.get('name'),
-                           perms,
-                           entry.get('perms'))
-                entry.set('qtext', nqtext)
-            if mtime != entry.get('mtime', '-1'):
-                entry.set('current_mtime', mtime)
-                self.logger.debug("%s %s mtime is %s should be %s" \
-                                  % (entry.tag, entry.get('name'), mtime,
-                                     entry.get('mtime')))
-                nqtext = entry.get('qtext', '') + '\n'
-                nqtext += "%s mtime is %s should be %s" % \
-                          (entry.get('name'), mtime, entry.get('mtime'))
-                entry.set('qtext', nqtext)
-            if entry.get('type') != 'file':
-                nnqtext = entry.get('qtext')
-                nnqtext += '\nInstall %s %s: (y/N) ' % (entry.get('type'),
-                                                        entry.get('name'))
-                entry.set('qtext', nnqtext)
-        return pTrue and pruneTrue
+        return pruneTrue and self._verify_metadata(entry)
 
     def Installdirectory(self, entry):
         """Install Path type='directory' entry."""
@@ -442,7 +385,7 @@ class POSIX(Bcfg2.Client.Tools.Tool):
     def Verifyfile(self, entry, _):
         """Verify Path type='file' entry."""
         # permissions check + content check
-        permissionStatus = self.Verifydirectory(entry, _)
+        permissionStatus = self._verify_metadata(entry)
         tbin = False
         if entry.text == None and entry.get('empty', 'false') == 'false':
             self.logger.error("Cannot verify incomplete Path type='%s' %s" %
@@ -529,8 +472,6 @@ class POSIX(Bcfg2.Client.Tools.Tool):
                     else:
                         prompt.append("Diff took too long to compute, no "
                                       "printable diff")
-                prompt.append("Install %s %s: (y/N): " % (entry.tag,
-                                                          entry.get('name')))
                 entry.set("qtext", "\n".join(prompt))
 
             if entry.get('sensitive', 'false').lower() != 'true':
@@ -559,12 +500,6 @@ class POSIX(Bcfg2.Client.Tools.Tool):
                                   binascii.b2a_base64("\n".join(diff)))
                     elif not tbin and isString(content, self.setup['encoding']):
                         entry.set('current_bfile', binascii.b2a_base64(content))
-        elif permissionStatus == False and self.setup['interactive']:
-            prompt = [entry.get('qtext', '')]
-            prompt.append("Install %s %s: (y/N): " % (entry.tag,
-                                                      entry.get('name')))
-            entry.set("qtext", "\n".join(prompt))
-
 
         return permissionStatus and not different
 
@@ -687,21 +622,35 @@ class POSIX(Bcfg2.Client.Tools.Tool):
                               'Try running bcfg2-lint.' % \
                               (entry.get('name')))
             return False
+
+        errors = []
+
         try:
-            if os.path.samefile(entry.get('name'), entry.get('to')):
-                return True
-            self.logger.debug("Hardlink %s is incorrect" % \
+            if not os.path.samefile(entry.get('name'), entry.get('to')):
+                errors.append("Hardlink %s is incorrect." %
                               entry.get('name'))
-            entry.set('qtext', "Link %s to %s? [y/N] " % \
-                      (entry.get('name'),
-                       entry.get('to')))
-            return False
         except OSError:
             entry.set('current_exists', 'false')
-            entry.set('qtext', "Link %s to %s? [y/N] " % \
-                      (entry.get('name'),
-                       entry.get('to')))
             return False
+
+        if not secontextMatches(entry):
+            if entry.get("secontext") == "__default__":
+                configContext = selinux.matchpathcon(path, 0)[1]
+            else:
+                configContext = entry.get("secontext")
+            pcontext = selinux.getfilecon(entry.get('name'))[1]
+            entry.set('current_secontext', pcontext)
+            errors.append("SELinux context for path %s is incorrect. "
+                          "Current context is %s but should be %s" %
+                          (entry.get("name"), pcontext, configContext))
+
+        if errors:
+            for error in errors:
+                self.logger.debug(msg)
+            entry.set('qtext', "\n".join([entry.get('qtext', '')] + errors))
+            return False
+        else:
+            return True
 
     def Installhardlink(self, entry):
         """Install HardLink entry."""
@@ -781,48 +730,15 @@ class POSIX(Bcfg2.Client.Tools.Tool):
 
     def Verifypermissions(self, entry, _):
         """Verify Path type='permissions' entry"""
-        if entry.get('perms') == None or \
-           entry.get('owner') == None or \
-           entry.get('group') == None:
-            self.logger.error('Entry %s not completely specified. '
-                              'Try running bcfg2-lint.' % (entry.get('name')))
-            return False
+        rv = self._verify_metadata(entry)
+        
         if entry.get('recursive') in ['True', 'true']:
             # verify ownership information recursively
-            owner = normUid(entry)
-            group = normGid(entry)
-
             for root, dirs, files in os.walk(entry.get('name')):
                 for p in dirs + files:
-                    path = os.path.join(root, p)
-                    pstat = os.stat(path)
-                    if owner != pstat.st_uid:
-                        # owner mismatch for path
-                        entry.set('current_owner', str(pstat.st_uid))
-                        self.logger.debug("%s %s ownership wrong" % \
-                                          (entry.tag, path))
-                        nqtext = entry.get('qtext', '') + '\n'
-                        nqtext += ("Owner for path %s is incorrect. "
-                                   "Current owner is %s but should be %s\n" % \
-                                   (path, pstat.st_uid, entry.get('owner')))
-                        nqtext += ("\nInstall %s %s: (y/N): " %
-                                   (entry.tag, entry.get('name')))
-                        entry.set('qtext', nqtext)
-                        return False
-                    if group != pstat.st_gid:
-                        # group mismatch for path
-                        entry.set('current_group', str(pstat.st_gid))
-                        self.logger.debug("%s %s group wrong" % \
-                                          (entry.tag, path))
-                        nqtext = entry.get('qtext', '') + '\n'
-                        nqtext += ("Group for path %s is incorrect. "
-                                   "Current group is %s but should be %s\n" % \
-                                   (path, pstat.st_gid, entry.get('group')))
-                        nqtext += ("\nInstall %s %s: (y/N): " %
-                                   (entry.tag, entry.get('name')))
-                        entry.set('qtext', nqtext)
-                        return False
-        return self.Verifydirectory(entry, _)
+                    rv &= self._verify_metadata(entry,
+                                                path=os.path.join(root, p))
+        return rv
 
     def _diff(self, content1, content2, difffunc, filename=None):
         rv = []
@@ -883,24 +799,40 @@ class POSIX(Bcfg2.Client.Tools.Tool):
         """Verify Path type='symlink' entry."""
         if entry.get('to') == None:
             self.logger.error('Entry %s not completely specified. '
-                              'Try running bcfg2-lint.' % \
+                              'Try running bcfg2-lint.' %
                               (entry.get('name')))
             return False
+
+        errors = []
+
         try:
             sloc = os.readlink(entry.get('name'))
-            if sloc == entry.get('to'):
-                return True
-            self.logger.debug("Symlink %s points to %s, should be %s" % \
+            if sloc != entry.get('to'):
+                entry.set('current_to', sloc)
+                errors.append("Symlink %s points to %s, should be %s" %
                               (entry.get('name'), sloc, entry.get('to')))
-            entry.set('current_to', sloc)
-            entry.set('qtext', "Link %s to %s? [y/N] " % (entry.get('name'),
-                                                   entry.get('to')))
-            return False
         except OSError:
             entry.set('current_exists', 'false')
-            entry.set('qtext', "Link %s to %s? [y/N] " % (entry.get('name'),
-                                                   entry.get('to')))
             return False
+
+        if not secontextMatches(entry):
+            if entry.get("secontext") == "__default__":
+                configContext = selinux.matchpathcon(path, 0)[1]
+            else:
+                configContext = entry.get("secontext")
+            pcontext = selinux.getfilecon(entry.get('name'))[1]
+            entry.set('current_secontext', pcontext)
+            errors.append("SELinux context for path %s is incorrect. "
+                          "Current context is %s but should be %s" %
+                          (entry.get("name"), pcontext, configContext))
+
+        if errors:
+            for error in errors:
+                self.logger.debug(msg)
+            entry.set('qtext', "\n".join([entry.get('qtext', '')] + errors))
+            return False
+        else:
+            return True
 
     def Installsymlink(self, entry):
         """Install Path type='symlink' entry."""
@@ -943,4 +875,101 @@ class POSIX(Bcfg2.Client.Tools.Tool):
     def VerifyPath(self, entry, _):
         """Dispatch verify to the proper method according to type"""
         ret = getattr(self, 'Verify%s' % entry.get('type'))
+        if entry.get('qtext') and self.setup['interactive']:
+            entry.set('qtext',
+                      '%s\nInstall %s %s: (y/N) ' %
+                      (entry.get('qtext') entry.get('type'), entry.get('name')))
         return ret(entry, _)
+
+    def _verify_metadata(self, entry, path=None):
+        """ generic method to verify perms, owner, group, secontext,
+        and mtime """
+
+        # allow setting an alternate path for recursive permissions checking
+        if path is None:
+            path = entry.get('name')
+        
+        if (entry.get('perms') == None or
+            entry.get('owner') == None or
+            entry.get('group') == None):
+            self.logger.error('POSIX: Entry %s:%s not completely specified. '
+                              'Try running bcfg2-lint.' % (entry.get('type'),
+                                                           entry.get('name')))
+            return False
+
+        while len(entry.get('perms', '')) < 4:
+            entry.set('perms', '0' + entry.get('perms', ''))
+
+        try:
+            ondisk = os.stat(path)
+        except OSError:
+            entry.set('current_exists', 'false')
+            self.logger.debug("POSIX: %s %s does not exist" %
+                              (entry.tag, path))
+            return False
+
+        try:
+            owner = str(ondisk[stat.ST_UID])
+            group = str(ondisk[stat.ST_GID])
+        except (OSError, KeyError):
+            self.logger.error('POSIX: User/Group resolution failed for path %s'
+                              % path)
+            owner = 'root'
+            group = '0'
+
+        perms = oct(ondisk[stat.ST_MODE])[-4:]
+        if entry.get('mtime', '-1') != '-1':
+            mtime = str(ondisk[stat.ST_MTIME])
+        else:
+            mtime = '-1'
+
+        configOwner = str(normUid(entry))
+        configGroup = str(normGid(entry))
+        if entry.get('dev_type'):
+            configPerms = calcPerms(device_map[entry.get('dev_type')],
+                                    entry.get('perms'))
+        if has_selinux:
+            if entry.get("secontext") == "__default__":
+                configContext = selinux.matchpathcon(path, 0)[1]
+            else:
+                configContext = entry.get("secontext")
+
+        errors = []
+        if owner != configOwner:
+            entry.set('current_owner', owner)
+            errors.append("POSIX: Owner for path %s is incorrect. "
+                          "Current owner is %s but should be %s" %
+                          (path, ondisk.st_uid, entry.get('owner')))
+                        
+        if group != configGroup:
+            entry.set('current_group', group)
+            errors.append("POSIX: Group for path %s is incorrect. "
+                          "Current group is %s but should be %s" %
+                          (path, ondisk.st_gid, entry.get('group')))
+
+        if perms != configPerms
+            entry.set('current_perms', perms)
+            errors.append("POSIX: Permissions for path %s are incorrect. "
+                          "Current permissions are %s but should be %s" %
+                          (path, perms, entry.get('perms')))
+
+        if entry.get('mtime') and mtime != entry.get('mtime', '-1'):
+            entry.set('current_mtime', mtime)
+            errors.append("POSIX: mtime for path %s is incorrect. "
+                          "Current mtime is %s but should be %s" %
+                          (path, mtime, entry.get('mtime')))
+
+        if has_selinux and not secontextMatches(entry):
+            pcontext = selinux.getfilecon(path)[1]
+            entry.set('current_secontext', pcontext)
+            errors.append("POSIX: SELinux context for path %s is incorrect. "
+                          "Current context is %s but should be %s" %
+                          (path, pcontext, configContext))
+
+        if errors:
+            for error in errors:
+                self.logger.debug(msg)
+            entry.set('qtext', "\n".join([entry.get('qtext', '')] + errors))
+            return False
+        else:
+            return True
