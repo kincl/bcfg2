@@ -232,13 +232,9 @@ class POSIX(Bcfg2.Client.Tools.Tool):
     def canInstall(self, entry):
         """Check if entry is complete for installation."""
         if Bcfg2.Client.Tools.Tool.canInstall(self, entry):
-            if (entry.tag,
-                entry.get('type'),
-                entry.text,
-                entry.get('empty', 'false')) == ('Path',
-                                                 'file',
-                                                 None,
-                                                 'false'):
+            if (entry.get('type') == 'file' and
+                entry.text is None and
+                entry.get('empty', 'false') == 'false'):
                 return False
             return True
         else:
@@ -867,13 +863,13 @@ class POSIX(Bcfg2.Client.Tools.Tool):
 
     def VerifyPath(self, entry, _):
         """Dispatch verify to the proper method according to type"""
-        ret = getattr(self, 'Verify%s' % entry.get('type'))
+        ret = getattr(self, 'Verify%s' % entry.get('type'))(entry, _)
         if entry.get('qtext') and self.setup['interactive']:
             entry.set('qtext',
                       '%s\nInstall %s %s: (y/N) ' %
                       (entry.get('qtext'),
                        entry.get('type'), entry.get('name')))
-        return ret(entry, _)
+        return ret
 
     def _verify_metadata(self, entry, path=None, checkonly=False):
         """ generic method to verify perms, owner, group, secontext,

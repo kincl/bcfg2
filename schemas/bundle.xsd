@@ -56,6 +56,14 @@
           </xsd:documentation>
         </xsd:annotation>
       </xsd:element>
+      <xsd:element name='SEBoolean' type='StructureEntry'>
+        <xsd:annotation>
+          <xsd:documentation>
+            Abstract implementation of an SELinux Boolean entry.  The
+            full specification will be included in Rules.
+          </xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
       <xsd:element name='PostInstall' type='StructureEntry'>
         <xsd:annotation>
           <xsd:documentation>
@@ -91,6 +99,13 @@
         <xsd:annotation>
           <xsd:documentation>
             Fully bound description of a command to be run.
+          </xsd:documentation>
+        </xsd:annotation>
+      </xsd:element>
+      <xsd:element name='BoundSEBoolean' type='SEBooleanType'>
+        <xsd:annotation>
+          <xsd:documentation>
+            Fully bound description of an SELinux Boolean.
           </xsd:documentation>
         </xsd:annotation>
       </xsd:element>
