@@ -1,4 +1,5 @@
-<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" xml:lang="en">
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" 
+            xmlns:py="http://genshi.edgewall.org/" xml:lang="en">
   
   <xsd:annotation>
     <xsd:documentation>
@@ -6,6 +7,9 @@
       Narayan Desai, Argonne National Laboratory
     </xsd:documentation>
   </xsd:annotation>
+
+  <xsd:import namespace="http://genshi.edgewall.org/"
+              schemaLocation="genshi.xsd"/>
 
   <xsd:simpleType name='PackageTypeEnum'>
     <xsd:restriction base='xsd:string'>
