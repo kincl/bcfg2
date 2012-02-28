@@ -58,10 +58,10 @@
           </xsd:documentation>
         </xsd:annotation>
       </xsd:element>
-      <xsd:element name='SEBoolean' type='StructureEntry'>
+      <xsd:element name='SELinux' type='StructureEntry'>
         <xsd:annotation>
           <xsd:documentation>
-            Abstract implementation of an SELinux Boolean entry.  The
+            Abstract implementation of an SELinux entry.  The
             full specification will be included in Rules.
           </xsd:documentation>
         </xsd:annotation>
@@ -104,10 +104,10 @@
           </xsd:documentation>
         </xsd:annotation>
       </xsd:element>
-      <xsd:element name='BoundSEBoolean' type='SEBooleanType'>
+      <xsd:element name='BoundSELinux' type='SELinuxType'>
         <xsd:annotation>
           <xsd:documentation>
-            Fully bound description of an SELinux Boolean.
+            Fully bound description of an SELinux entry.
           </xsd:documentation>
         </xsd:annotation>
       </xsd:element>

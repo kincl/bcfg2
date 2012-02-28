@@ -318,6 +318,131 @@ symlink
 | to   | File to link to      | String |
 +------+----------------------+--------+
 
+SELinux Tag
+-----------
+
+The SELinux tag has different values depending on the *type* attribute
+of the SELinux entry specified in your configuration. Below is a set
+of tables which describe the attributes available for various SELinux
+types.  The types (except for ``module``) correspond to ``semanage``
+subcommands.
+
+boolean
+^^^^^^^
+
++-------+----------------------+---------+----------+
+| Name  | Description          | Values  | Required |
++=======+======================+=========+==========+
+| name  | Name of the boolean  | String  | Yes      |
++-------+----------------------+---------+----------+
+| value | Value of the boolean | Boolean | Yes      |
++-------+----------------------+---------+----------+
+
+port
+^^^^
+
++-------------+-----------------------+---------------+----------+
+| Name        | Description           | Values        | Required |
++=============+=======================+===============+==========+
+| name        | Port number or range  | Integer or    | Yes      |
+|             |                       | ``start-end`` |          |
++-------------+-----------------------+---------------+----------+
+| selinuxtype | SELinux context type  | String        | Yes      |
+|             | to apply to this port |               |          |
++-------------+-----------------------+---------------+----------+
+| proto       | Protocol              | (tcp|udp)     | Yes      |
++-------------+-----------------------+---------------+----------+
+
+fcontext
+^^^^^^^^
+
++-------------+-------------------------+---------------------+----------+
+| Name        | Description             | Values              | Required |
++=============+=========================+=====================+==========+
+| name        | File specification      | String              | Yes      |
++-------------+-------------------------+---------------------+----------+
+| selinuxtype | SELinux context to      | String              | Yes      |
+|             | apply to files matching |                     |          |
+|             | this specification      |                     |          |
++-------------+-------------------------+---------------------+----------+
+| filetype    | File type to match      | (regular|directory| | No       |
+|             |                         |  symlink|pipe|      |          |
+|             |                         |  socket|block|char) |          |
++-------------+-------------------------+---------------------+----------+
+
+node
+^^^^
+
++-------------+--------------------+-------------+----------+
+| Name        | Description        | Values      | Required |
++=============+====================+=============+==========+
+| name        | IP address of node | String      | Yes      |
++-------------+--------------------+-------------+----------+
+| selinuxtype | SELinux context to | String      | Yes      |
+|             | apply to this node |             |          |
++-------------+--------------------+-------------+----------+
+| proto       | Protocol           | (ipv4|ipv6) | Yes      |
++-------------+--------------------+-------------+----------+
+| netmask     | Netmask            | String      | Yes      |
++-------------+--------------------+-------------+----------+
+
+login
+^^^^^
+
++-------------+-------------------------------+-----------+----------+
+| Name        | Description                   | Values    | Required |
++=============+===============================+===========+==========+
+| name        | Unix username                 | String    | Yes      |
++-------------+-------------------------------+-----------+----------+
+| selinuxuser | SELinux username              | String    | Yes      |
++-------------+-------------------------------+-----------+----------+
+
+user
+^^^^
+
++-------------+-------------------------------+-----------+----------+
+| Name        | Description                   | Values    | Required |
++=============+===============================+===========+==========+
+| name        | SELinux username              | String    | Yes      |
++-------------+-------------------------------+-----------+----------+
+| roles       | Space-separated list of roles | String    | No       |
++-------------+-------------------------------+-----------+----------+
+| prefix      | Home directory context prefix | String    | No       |
++-------------+-------------------------------+-----------+----------+
+
+interface
+^^^^^^^^^
+
++-------------+-------------------------+-------------+----------+
+| Name        | Description             | Values      | Required |
++=============+=========================+=============+==========+
+| name        | Interface name          | String      | Yes      |
++-------------+-------------------------+-------------+----------+
+| selinuxtype | SELinux context type to | String      | Yes      |
+|             | apply to this interface |             |          |
++-------------+-------------------------+-------------+----------+
+
+permissive
+^^^^^^^^^^
+
++-------------+------------------------------------+-------------+----------+
+| Name        | Description                        | Values      | Required |
++=============+====================================+=============+==========+
+| name        | SELinux context to make permissive | String      | Yes      |
++-------------+------------------------------------+-------------+----------+
+
+module
+^^^^^^
+
++-------------+---------------------------+-------------+----------+
+| Name        | Description               | Values      | Required |
++=============+===========================+=============+==========+
+| name        | Module name               | String      | Yes      |
++-------------+---------------------------+-------------+----------+
+| disabled    | Disable module            | Boolean     | No       |
++-------------+---------------------------+-------------+----------+
+
+
 Rules Directory
 ===============
 

@@ -50,10 +50,10 @@
           </xsd:documentation>
         </xsd:annotation>
       </xsd:element>
-      <xsd:element name='SEBoolean' type='SEBooleanType'>
+      <xsd:element name='SELinux' type='SELinuxType'>
         <xsd:annotation>
           <xsd:documentation>
-            Fully bound description of an SELinux Boolean.
+            Fully bound description of an SELinux entry.
           </xsd:documentation>
         </xsd:annotation>
       </xsd:element>

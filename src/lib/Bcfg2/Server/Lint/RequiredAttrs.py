@@ -26,7 +26,18 @@ class RequiredAttrs(Bcfg2.Server.Lint.ServerPlugin):
                 'smf': ['name', 'FMRI'],
                 'upstart': ['name']},
             'Action': ['name', 'timing', 'when', 'status', 'command'],
-            'Package': ['name']}
+            'Package': ['name'],
+            'SELinux': {
+                'boolean': ['name', 'value'],
+                'module': ['name', '__text__'],
+                'port': ['name', 'selinuxtype', 'proto'],
+                'fcontext': ['name', 'selinuxtype'],
+                'node': ['name', 'selinuxtype', 'proto'],
+                'login': ['name', 'selinuxuser'],
+                'user': ['name'],
+                'interface': ['name', 'selinuxtype'],
+                'permissive': ['name'],}
+            }
 
     def Run(self):
         self.check_packages()

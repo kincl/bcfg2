@@ -14,12 +14,12 @@ class SEModuleData(Bcfg2.Server.Plugin.SpecificData):
         entry.text = binascii.b2a_base64(self.data)
 
 class SEModules(Bcfg2.Server.Plugin.GroupSpool):
-    """ Handle SEModule entries """
+    """ Handle SELinux 'module' entries """
     name = 'SEModules'
     __author__ = 'chris.a.st.pierre@gmail.com'
     es_cls = Bcfg2.Server.Plugin.EntrySet
     es_child_cls = SEModuleData
-    entry_type = 'SEModule'
+    entry_type = 'SELinux'
     experimental = True
 
     def HandlesEntry(self, entry, metadata):
@@ -54,4 +54,4 @@ class SEModules(Bcfg2.Server.Plugin.GroupSpool):
         else:
             # strip leading and trailing slashes
             return self.handles[event.requestID][1:-1]
-        
+

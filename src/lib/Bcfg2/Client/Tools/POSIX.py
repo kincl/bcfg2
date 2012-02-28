@@ -472,7 +472,7 @@ class POSIX(Bcfg2.Client.Tools.Tool):
                     tempdata = tempdata.encode(self.setup['encoding'])
                 except UnicodeEncodeError:
                     e = sys.exc_info()[1]
-                    self.logger.error("Error encoding file %s:\n %s" % \
+                    self.logger.error("Error encoding file %s:\n %s" %
                                       (entry.get('name'), e))
 
         different = False
@@ -581,8 +581,8 @@ class POSIX(Bcfg2.Client.Tools.Tool):
             try:
                 os.stat(parent)
             except:
-                self.logger.debug('Creating parent path for config file %s' % \
-                                  (entry.get('name')))
+                self.logger.debug('Creating parent path for config file %s' %
+                                  entry.get('name'))
                 current = '/'
                 for next in parent.split('/')[1:]:
                     current += next + '/'
@@ -590,23 +590,24 @@ class POSIX(Bcfg2.Client.Tools.Tool):
                         sloc = os.stat(current)
                         try:
                             if not stat.S_ISDIR(sloc[stat.ST_MODE]):
-                                self.logger.debug('%s is not a directory; recreating' \
-                                                  % (current))
+                                self.logger.debug('%s is not a directory; recreating'
+                                                  % current)
                                 os.unlink(current)
                                 os.mkdir(current)
                         except OSError:
                             return False
                     except OSError:
                         try:
-                            self.logger.debug("Creating non-existent path %s" % current)
+                            self.logger.debug("Creating non-existent path %s" %
+                                              current)
                             os.mkdir(current)
                         except OSError:
                             return False
 
         # If we get here, then the parent directory should exist
-        if (entry.get("paranoid", False) in ['true', 'True']) and \
-           self.setup.get("paranoid", False) and not \
-           (entry.get('current_exists', 'true') == 'false'):
+        if (entry.get("paranoid", False) in ['true', 'True']) and
+               self.setup.get("paranoid", False) and not
+               (entry.get('current_exists', 'true') == 'false'):
             bkupnam = entry.get('name').replace('/', '_')
             # current list of backups for this file
             try:
@@ -625,7 +626,7 @@ class POSIX(Bcfg2.Client.Tools.Tool):
                 try:
                     os.remove("%s/%s" % (self.ppath, oldest))
                 except:
-                    self.logger.error("Failed to remove %s/%s" % \
+                    self.logger.error("Failed to remove %s/%s" %
                                       (self.ppath, oldest))
                     return False
             try:
@@ -637,8 +638,8 @@ class POSIX(Bcfg2.Client.Tools.Tool):
                                  (entry.get('name'), self.ppath))
             except IOError:
                 e = sys.exc_info()[1]
-                self.logger.error("Failed to create backup file for %s" % \
-                                  (entry.get('name')))
+                self.logger.error("Failed to create backup file for %s" %
+                                  entry.get('name'))
                 self.logger.error(e)
                 return False
         try:
@@ -668,7 +669,8 @@ class POSIX(Bcfg2.Client.Tools.Tool):
         except (OSError, IOError):
             err = sys.exc_info()[1]
             if err.errno == errno.EACCES:
-                self.logger.info("Failed to open %s for writing" % (entry.get('name')))
+                self.logger.info("Failed to open %s for writing" %
+                                 entry.get('name'))
             else:
                 print(err)
             return False
