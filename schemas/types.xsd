@@ -151,12 +151,18 @@
       <xsd:enumeration value='socket'/>
       <xsd:enumeration value='block'/>
       <xsd:enumeration value='char'/>
-      <xsd:enumeration value='door'/>
     </xsd:restriction>
   </xsd:simpleType>
 
+  <xsd:complexType name="SELinuxStructure">
+    <xsd:attribute type='xsd:string' name='name' use='required'/>
+    <xsd:attribute type="xsd:boolean" name="disabled"/>
+    <xsd:attributeGroup ref="py:genshiAttrs"/>
+  </xsd:complexType>
+
   <xsd:complexType name="SELinuxType">
     <xsd:attribute type="xsd:string" name="name" use="required"/>
+    <xsd:attribute type="xsd:string" name="type" use="required"/>
     <xsd:attribute type="xsd:boolean" name="value"/>
     <xsd:attribute type="xsd:boolean" name="disabled"/>
     <xsd:attribute type="xsd:string" name="selinuxtype"/>

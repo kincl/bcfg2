@@ -58,7 +58,7 @@
           </xsd:documentation>
         </xsd:annotation>
       </xsd:element>
-      <xsd:element name='SELinux' type='StructureEntry'>
+      <xsd:element name='SELinux' type='SELinuxStructure'>
         <xsd:annotation>
           <xsd:documentation>
             Abstract implementation of an SELinux entry.  The
