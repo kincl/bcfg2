@@ -36,7 +36,6 @@ class SEModules(Bcfg2.Server.Plugin.GroupSpool):
         if ident not in self.entries and posixpath.isfile(epath):
             dirpath = "/".join([self.data, ident])
             basename = os.path.split(self.handles[event.requestID][:-1])[1]
-            print "basename=%s" % basename
             self.entries[ident] = self.es_cls(basename,
                                               dirpath,
                                               self.es_child_cls,
