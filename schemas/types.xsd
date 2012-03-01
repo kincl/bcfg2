@@ -154,6 +154,20 @@
     </xsd:restriction>
   </xsd:simpleType>
 
+  <xsd:simpleType name='SELinuxEntryTypeEnum'>
+    <xsd:restriction base='xsd:string'>
+      <xsd:enumeration value='boolean'/>
+      <xsd:enumeration value='module'/>
+      <xsd:enumeration value='port'/>
+      <xsd:enumeration value='fcontext'/>
+      <xsd:enumeration value='node'/>
+      <xsd:enumeration value='login'/>
+      <xsd:enumeration value='user'/>
+      <xsd:enumeration value='interface'/>
+      <xsd:enumeration value='permissive'/>
+    </xsd:restriction>
+  </xsd:simpleType>
+
   <xsd:complexType name="SELinuxStructure">
     <xsd:attribute type='xsd:string' name='name' use='required'/>
     <xsd:attribute type="xsd:boolean" name="disabled"/>
@@ -162,7 +176,7 @@
 
   <xsd:complexType name="SELinuxType">
     <xsd:attribute type="xsd:string" name="name" use="required"/>
-    <xsd:attribute type="xsd:string" name="type" use="required"/>
+    <xsd:attribute type="SELinuxEntryTypeEnum" name="type" use="required"/>
     <xsd:attribute type="xsd:boolean" name="value"/>
     <xsd:attribute type="xsd:boolean" name="disabled"/>
     <xsd:attribute type="xsd:string" name="selinuxtype"/>
