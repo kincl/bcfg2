@@ -35,7 +35,8 @@ class SELinux(Bcfg2.Client.Tools.Tool):
         for handles in self.__handles__:
             etype = handles[1]
             self.handlers[etype] = \
-                locals()["SELinux%sHandler" % etype.title()]()
+                globals()["SELinux%sHandler" % etype.title()](self, logger,
+                                                              setup, config)
 
     def BundleUpdated(self, _, states):
         for handler in self.handlers.values():
@@ -78,7 +79,9 @@ class SELinux(Bcfg2.Client.Tools.Tool):
 class SELinuxEntryHandler(object):
     etype = None
     
-    def __init__(self):
+    def __init__(self, tool, logger, setup, config):
+        self.tool = tool
+        self.logger = logger
         self._records = None
         self._all = None
 
@@ -185,7 +188,7 @@ class SELinuxEntryHandler(object):
         self.logger.debug("Found SELinux %ss:" % self.etype)
         self.logger.debug(self.all_records.keys())
         specified = [e.get('name')
-                     for e in self.getSupportedEntries()
+                     for e in self.tool.getSupportedEntries()
                      if e.type == self.etype]
         return [Bcfg2.Client.XML.Element('SELinux',
                                          type=self.etype,
@@ -394,8 +397,8 @@ class SELinuxPermissiveHandler(SELinuxEntryHandler):
 
 
 class SELinuxModuleHandler(SELinuxEntryHandler):
-    def __init__(self, logger, setup, config):
-        SELinuxEntryHandler.__init__(self, logger, setup, config)
+    def __init__(self, tool, logger, setup, config):
+        SELinuxEntryHandler.__init__(self, tool, logger, setup, config)
         self.posixtool = Bcfg2.Client.Tools.POSIX.POSIX(logger, setup, config)
 
     @property
