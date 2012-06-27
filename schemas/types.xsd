@@ -1,6 +1,6 @@
-<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" 
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
             xmlns:py="http://genshi.edgewall.org/" xml:lang="en">
-  
+
   <xsd:annotation>
     <xsd:documentation>
       string enumeration definitions for bcfg2
@@ -144,6 +144,7 @@
 
   <xsd:simpleType name='SELinuxFileTypeEnum'>
     <xsd:restriction base='xsd:string'>
+      <xsd:enumeration value='all'/>
       <xsd:enumeration value='normal'/>
       <xsd:enumeration value='directory'/>
       <xsd:enumeration value='symlink'/>
@@ -183,7 +184,7 @@
     <xsd:attribute type="SELinuxFileTypeEnum" name="filetype"/>
     <xsd:attribute type="xsd:string" name="netmask"/>
     <xsd:attribute type="xsd:string" name="proto"/>
-    <xsd:attribute type="xsd:string" name="role"/>
+    <xsd:attribute type="xsd:string" name="roles"/>
     <xsd:attribute type="xsd:string" name="prefix"/>
     <xsd:attribute type="xsd:string" name="selinuxuser"/>
     <xsd:attributeGroup ref="py:genshiAttrs"/>

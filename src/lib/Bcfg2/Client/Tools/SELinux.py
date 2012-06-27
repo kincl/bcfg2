@@ -76,7 +76,7 @@ class SELinux(Bcfg2.Client.Tools.Tool):
                                                     if e.get('type') == etype])
         
 class SELinuxEntryHandler(object):
-    self.etype = None
+    etype = None
     
     def __init__(self):
         self._records = None
@@ -95,10 +95,10 @@ class SELinuxEntryHandler(object):
         return self._all
 
     def tostring(self, entry):
-        return self.get("name")
+        return entry.get("name")
 
     def _key(self, entry):
-        return self.get("name")
+        return entry.get("name")
 
     def _namefromkey(self, key):
         if isinstance(key, tuple):
@@ -162,7 +162,7 @@ class SELinuxEntryHandler(object):
             method = "add"
 
         try:
-            getattr(ports, method)(*self._installargs(entry))
+            getattr(self.records, method)(*self._installargs(entry))
             self._all = None
             return True
         except ValueError:
@@ -290,8 +290,8 @@ class SELinuxFcontextHandler(SELinuxEntryHandler):
         return self._all
 
     def _key(self, entry):
-        ftype = self.get("filetype")
-        if ftype == None:
+        ftype = entry.get("filetype", "all")
+        if ftype == "all":
             ftype = "all files"
         elif ftype == "regular":
             ftype = "regular file"
@@ -303,7 +303,7 @@ class SELinuxFcontextHandler(SELinuxEntryHandler):
             ftype = "block device"
         elif ftype == "char":
             ftype = "character device"
-        return (self.get("name"), ftype)
+        return (entry.get("name"), ftype)
 
     def _expected(self):
         return (None, None, "selinuxtype", None)
@@ -335,7 +335,7 @@ class SELinuxLoginHandler(SELinuxEntryHandler):
         return ("selinuxuser", None)
     
     def _installargs(self, entry):
-        return (self.get("name"), self.get("selinuxuser"), "")
+        return (entry.get("name"), entry.get("selinuxuser"), "")
 
 
 class SELinuxUserHandler(SELinuxEntryHandler):
@@ -351,17 +351,18 @@ class SELinuxUserHandler(SELinuxEntryHandler):
         return ("prefix", None, None, "roles")
     
     def _installargs(self, entry):
-        return (self.get("name"), roles, '', '', self.get("prefix"))
+        roles = entry.get("roles", "").replace(" ", ",").split(",")
+        return (entry.get("name"), roles, '', '', entry.get("prefix"))
 
 
 class SELinuxInterfaceHandler(SELinuxEntryHandler):
     etype = "interface"
 
     def _installargs(self, entry):
-        return (self.get("name"), '', self.get("selinuxtype"))
+        return (entry.get("name"), '', entry.get("selinuxtype"))
 
     def _expected(self):
-        return (None, None, self.get("selinuxtype"), None)
+        return (None, None, entry.get("selinuxtype"), None)
 
 
 class SELinuxPermissiveHandler(SELinuxEntryHandler):
@@ -389,7 +390,7 @@ class SELinuxPermissiveHandler(SELinuxEntryHandler):
         return self._all
 
     def _installargs(self, entry):
-        return (self.get("name"))
+        return (entry.get("name"))
 
 
 class SELinuxModuleHandler(SELinuxEntryHandler):
@@ -438,7 +439,7 @@ class SELinuxModuleHandler(SELinuxEntryHandler):
         return (self._filepath(entry))
 
     def _deleteargs(self, entry):
-        return (self.get("name").replace(".pp", ""))
+        return (entry.get("name").replace(".pp", ""))
 
     def FindExtra(self):
         # do not inventory selinux modules; it'd be basically
