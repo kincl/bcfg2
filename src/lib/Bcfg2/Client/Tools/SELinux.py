@@ -43,7 +43,10 @@ class SELinux(Bcfg2.Client.Tools.Tool):
             handler.BundleUpdated(states)
 
     def FindExtra(self):
-        return [h.FindExtra() for h in self.handlers.values()]
+        extra = []
+        for handler in self.handlers.values():
+            extra.extend(handler.FindExtra())
+        return extra
 
     def canInstall(self, entry):
         return (Bcfg2.Client.Tools.Tool.canInstall(self, entry) and
@@ -103,11 +106,11 @@ class SELinuxEntryHandler(object):
     def _key(self, entry):
         return entry.get("name")
 
-    def _namefromkey(self, key):
+    def _key2attrs(self, key):
         if isinstance(key, tuple):
-            return key[0]
+            return dict(name=key[0])
         else:
-            return key
+            return dict(name=key)
 
     def _installargs(self, entry):
         return ()
@@ -187,14 +190,12 @@ class SELinuxEntryHandler(object):
     def FindExtra(self):
         self.logger.debug("Found SELinux %ss:" % self.etype)
         self.logger.debug(self.all_records.keys())
-        specified = [e.get('name')
+        specified = [self._key(e)
                      for e in self.tool.getSupportedEntries()
                      if e.type == self.etype]
-        return [Bcfg2.Client.XML.Element('SELinux',
-                                         type=self.etype,
-                                         name=name)
-                for name in self.all_records.keys()
-                if name not in specified]
+        return [Bcfg2.Client.XML.Element('SELinux', **self._key2attrs(key))
+                for key in self.all_records.keys()
+                if key not in specified]
 
     def BundleUpdated(self, states):
         pass
@@ -251,6 +252,22 @@ class SELinuxPortHandler(SELinuxEntryHandler):
                                   for k, v in ports.items()])
         return self._all
 
+    def _key(self, entry):
+        port = entry.get("name")
+        if ":" in port:
+            start, end = port.split(":")
+        else:
+            start = port
+            end = port
+        return (start, end, self.get("proto"))
+    
+    def _key2attrs(self, key):
+        if key[0] == key[1]:
+            port = str(key[0])
+        else:
+            port = "%s:%s" % (key[0], key[1])
+        return dict(name=port, proto=key[2])
+
     def tostring(self, entry):
         return "%s/%s" % (entry.get('name'), entry.get('proto'))
 
@@ -267,15 +284,25 @@ class SELinuxPortHandler(SELinuxEntryHandler):
 
 class SELinuxFcontextHandler(SELinuxEntryHandler):
     etype = "fcontext"
-    filetypemap = dict(all="",
-                       regular="--",
-                       directory="-d",
-                       symlink="-l",
-                       pipe="-p",
-                       socket="-s",
-                       block="-b",
-                       char="-c",
-                       door="-D")
+    filetypeargs = dict(all="",
+                        regular="--",
+                        directory="-d",
+                        symlink="-l",
+                        pipe="-p",
+                        socket="-s",
+                        block="-b",
+                        char="-c",
+                        door="-D")
+    filetypenames = dict(all="all files",
+                        regular="regular file",
+                        directory="directory",
+                        symlink="symbolic link",
+                        pipe="named pipe",
+                        socket="socket",
+                        block="block device",
+                        char="character device",
+                        door="door")
+    filetypeattrs = dict([v, k] for k, v in filetypenames.iteritems())
 
     @property
     def all_records(self):
@@ -293,27 +320,18 @@ class SELinuxFcontextHandler(SELinuxEntryHandler):
         return self._all
 
     def _key(self, entry):
-        ftype = entry.get("filetype", "all")
-        if ftype == "all":
-            ftype = "all files"
-        elif ftype == "regular":
-            ftype = "regular file"
-        elif ftype == "symlink":
-            ftype = "symbolic link"
-        elif ftype == "pipe":
-            ftype = "named pipe"
-        elif ftype == "block":
-            ftype = "block device"
-        elif ftype == "char":
-            ftype = "character device"
-        return (entry.get("name"), ftype)
+        return (entry.get("name"),
+                self.filetypenames[entry.get("filetype", "all")])
+
+    def _key2attrs(self, key):
+        return dict(name=key[0], filetype=self.filetypeattrs[key[1]])
 
     def _expected(self):
         return (None, None, "selinuxtype", None)
 
     def _installargs(self, entry):
         return (entry.get("name"), entry.get("selinuxtype"),
-                self.filetypemap(entry.get("filetype", "all")),
+                self.filetypeargs(entry.get("filetype", "all")),
                 '', '')
         
 
@@ -322,6 +340,9 @@ class SELinuxNodeHandler(SELinuxEntryHandler):
 
     def _key(self, entry):
         return (entry.get("name"), entry.get("netmask"), entry.get("proto"))
+
+    def _key2attrs(self, key):
+        return dict(name=key[0], netmask=key[1], proto=key[2])
 
     def _expected(self):
         return (None, None, "selinuxtype", None)
@@ -374,7 +395,7 @@ class SELinuxPermissiveHandler(SELinuxEntryHandler):
     @property
     def records(self):
         try:
-            return SELinuxEntryHandler.records(self)
+            return SELinuxEntryHandler.records.fget(self)
         except AttributeError:
             self.logger.info("Permissive domains not supported by this version "
                              "of SELinux")
@@ -386,10 +407,11 @@ class SELinuxPermissiveHandler(SELinuxEntryHandler):
         if self._all is None:
             if self.records == False:
                 self._all = dict()
-            # permissionRecords.get_all() returns a list, so we just
-            # make it into a dict so that the rest of
-            # SELinuxEntryHandler works
-            self._all = dict([(d, d) for d in self.records.get_all()])
+            else:
+                # permissionRecords.get_all() returns a list, so we just
+                # make it into a dict so that the rest of
+                # SELinuxEntryHandler works
+                self._all = dict([(d, d) for d in self.records.get_all()])
         return self._all
 
     def _installargs(self, entry):

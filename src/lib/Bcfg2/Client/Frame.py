@@ -399,16 +399,32 @@ class Frame:
     def CondDisplayState(self, phase):
         """Conditionally print tracing information."""
         self.logger.info('\nPhase: %s' % phase)
-        self.logger.info('Correct entries:\t%d' % list(self.states.values()).count(True))
-        self.logger.info('Incorrect entries:\t%d' % list(self.states.values()).count(False))
+        self.logger.info('Correct entries:\t%d' %
+                         list(self.states.values()).count(True))
+        self.logger.info('Incorrect entries:\t%d' %
+                         list(self.states.values()).count(False))
         if phase == 'final' and list(self.states.values()).count(False):
-            self.logger.info(["%s:%s" % (entry.tag, entry.get('name')) for \
-                              entry in self.states if not self.states[entry]])
-        self.logger.info('Total managed entries:\t%d' % len(list(self.states.values())))
+            for entry in self.states.keys():
+                if not self.states[entry]:
+                    etype = entry.get('type')
+                    if etype:
+                        self.logger.info(    "%s:%s:%s" % (entry.tag, etype,
+                                                           entry.get('name')))
+                    else:
+                        self.logger.info("    %s:%s" % (entry.tag,
+                                                        entry.get('name')))
+        self.logger.info('Total managed entries:\t%d' %
+                         len(list(self.states.values())))
         self.logger.info('Unmanaged entries:\t%d' % len(self.extra))
         if phase == 'final' and self.setup['extra']:
-            self.logger.info(["%s:%s" % (entry.tag, entry.get('name')) \
-                              for entry in self.extra])
+            for entry in self.extra:
+                etype = entry.get('type')
+                if etype:
+                    self.logger.info(    "%s:%s:%s" % (entry.tag, etype,
+                                                       entry.get('name')))
+                else:
+                    self.logger.info("    %s:%s" % (entry.tag,
+                                                    entry.get('name')))
 
         self.logger.info("")
 
