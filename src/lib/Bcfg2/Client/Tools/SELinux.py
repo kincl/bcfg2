@@ -49,11 +49,11 @@ class SELinux(Bcfg2.Client.Tools.Tool):
 
     def canInstall(self, entry):
         return (Bcfg2.Client.Tools.Tool.canInstall(self, entry) and
-                self.handler[entry.get('type')].canInstall(entry))
+                self.handlers[entry.get('type')].canInstall(entry))
 
     def InstallSELinux(self, entry):
         """Dispatch install to the proper method according to type"""
-        return self.handler[entry.get('type')].Install(entry)
+        return self.handlers[entry.get('type')].Install(entry)
 
     def VerifySELinux(self, entry, _):
         """Dispatch verify to the proper method according to type"""
@@ -63,7 +63,7 @@ class SELinux(Bcfg2.Client.Tools.Tool):
                       '%s\nInstall SELinux %s %s: (y/N) ' %
                       (entry.get('qtext'),
                        entry.get('type'),
-                       self.handler[entry.get('type')].tostring(entry)))
+                       self.handlers[entry.get('type')].tostring(entry)))
         return rv
 
     def Remove(self, entries):
@@ -75,12 +75,13 @@ class SELinux(Bcfg2.Client.Tools.Tool):
                 types.append(entry.get('type'))
 
         for etype in types:
-            self.handler[entry.get('type')].Remove([e for e in entries
-                                                    if e.get('type') == etype])
+            self.handlers[entry.get('type')].Remove([e for e in entries
+                                                     if e.get('type') == etype])
+
         
 class SELinuxEntryHandler(object):
     etype = None
-    key_format = ("name")
+    key_format = ("name",)
     value_format = ()
     str_format = '%(name)s'
     
@@ -103,16 +104,19 @@ class SELinuxEntryHandler(object):
         return self._all
 
     def tostring(self, entry):
-        return self.str_format % self._entry2attrs(entry)
+        return self.str_format % entry.attrib
 
     def keytostring(self, key):
         return self.str_format % self._key2attrs(key)
 
     def _key(self, entry):
-        rv = []
-        for key in self.key_format:
-            rv.append(entry.get(key))
-        return tuple(rv)
+        if len(self.key_format) == 1 and self.key_format[0] == "name":
+            return entry.get("name")
+        else:
+            rv = []
+            for key in self.key_format:
+                rv.append(entry.get(key))
+            return tuple(rv)
 
     def _key2attrs(self, key):
         if isinstance(key, tuple):
@@ -130,11 +134,6 @@ class SELinuxEntryHandler(object):
                            if self.value_format[i]))
         return rv
 
-    def _entry2attrs(self, entry):
-        vals = self._key(entry)
-        return dict([(self.key_format[i], vals[i])
-                     for i in range(len(self.key_format))])
-
     def key2entry(self, key):
         attrs = self._key2attrs(key)
         attrs["type"] = self.etype
@@ -146,9 +145,6 @@ class SELinuxEntryHandler(object):
     def _deleteargs(self, entry):
         return (self._key(entry))
 
-    def _expected(self):
-        raise NotImplementedError
-
     def canInstall(self, entry):
         return True
     
@@ -159,29 +155,24 @@ class SELinuxEntryHandler(object):
             return False
         return True
 
-    def _get_desired_value(self, entry, attr, record, key):
-        return entry.get(attr)
-    
     def Verify(self, entry):
         if not self.exists(entry):
             entry.set('current_exists', 'false')
             return False
 
         errors = []
-        expected = self._expected()
-        key = self._key(entry)
-        record = self.all_records[key]
-        for idx in range(0, len(expected)):
-            attr = expected[idx]
-            if not attr:
-                continue
-            current = record[idx]
-            desired = self._get_desired_value(entry, attr, record, key)
-            if current != desired:
-                entry.set('current_%s' % attr, current)
+        current_attrs = self._key2attrs(self._key(entry))
+        desired_attrs = entry.attrib
+        if self.value_format == 'selinuxtype':
+            compare = ['selinuxtype']
+        else:
+            compare = [v for v in self.value_format if v]
+        for attr in compare:
+            if current_attrs[attr] != desired_attrs[attr]:
+                entry.set('current_%s' % attr, current_attrs[attr])
                 errors.append("SELinux %s %s has wrong %s: %s, should be %s" %
                               (self.etype, self.tostring(entry), attr,
-                               current, desired))
+                               current_attrs[attr], desired_attrs[attr]))
 
         if errors:
             for error in errors:
@@ -224,17 +215,10 @@ class SELinuxEntryHandler(object):
     def FindExtra(self):
         specified = [self._key(e)
                      for e in self.tool.getSupportedEntries()
-                     if e.type == self.etype]
-        print "specified: %s" % specified
-        rv = []
-        for key in self.all_records.keys():
-            print "checking if %s in specified: %s" % (key, key in specified)
-            if key not in specified:
-                rv.append(self.key2entry(key))
-        #return [self.key2entry(key)
-        #        for key in self.all_records.keys()
-        #        if key not in specified]
-        return rv
+                     if e.get("type") == self.etype]
+        return [self.key2entry(key)
+                for key in self.all_records.keys()
+                if key not in specified]
 
     def BundleUpdated(self, states):
         pass
@@ -242,6 +226,7 @@ class SELinuxEntryHandler(object):
 
 class SELinuxBooleanHandler(SELinuxEntryHandler):
     etype = "boolean"
+    value_format = ("value",)
 
     @property
     def all_records(self):
@@ -257,12 +242,6 @@ class SELinuxBooleanHandler(SELinuxEntryHandler):
                 rv[key] = [val, val, val]
         return rv
 
-    def _get_desired_value(self, entry, attr, record, key):
-        if entry.get("attr") == "on":
-            return 1
-        else:
-            return 0
-
     def _key2attrs(self, key):
         rv = SELinuxEntryHandler._key2attrs(self, key)
         status = self.all_records[key][0]
@@ -274,9 +253,6 @@ class SELinuxBooleanHandler(SELinuxEntryHandler):
 
     def canInstall(self, entry):
         return self.exists(entry)
-    
-    def _expected(self):
-        return ("value", None, None)
     
     def Install(self, entry):
         boolean = entry.get("name")
@@ -329,7 +305,7 @@ class SELinuxPortHandler(SELinuxEntryHandler):
         else:
             start = port
             end = port
-        return (start, end, self.get("proto"))
+        return (int(start), int(end), entry.get("proto"))
     
     def _key2attrs(self, key):
         if key[0] == key[1]:
@@ -338,12 +314,6 @@ class SELinuxPortHandler(SELinuxEntryHandler):
             port = "%s:%s" % (key[0], key[1])
         vals = self.all_records[key]
         return dict(name=port, proto=key[2], selinuxtype=vals[0])
-
-    def _entry2attrs(self, entry):
-        return dict(name=entry.get("name"), proto=entry.get("proto"))
-
-    def _expected(self):
-        return ("selinuxtype", None)
 
     def _installargs(self, entry):
         return (entry.get("name"), entry.get("proto"), '',
@@ -408,9 +378,6 @@ class SELinuxFcontextHandler(SELinuxEntryHandler):
             rv["selinuxtype"] = "<<none>>"
         return rv
 
-    def _expected(self):
-        return (None, None, "selinuxtype", None)
-
     def _installargs(self, entry):
         return (entry.get("name"), entry.get("selinuxtype"),
                 self.filetypeargs[entry.get("filetype", "all")],
@@ -423,9 +390,6 @@ class SELinuxNodeHandler(SELinuxEntryHandler):
     value_format = "selinuxtype"
     str_format = '%(name)s/%(netmask)s (%(proto)s)'
 
-    def _expected(self):
-        return (None, None, "selinuxtype", None)
-
     def _installargs(self, entry):
         return (entry.get("name"), entry.get("netmask"),
                 entry.get("proto"), "", entry.get("selinuxtype"))
@@ -435,9 +399,6 @@ class SELinuxLoginHandler(SELinuxEntryHandler):
     etype = "login"
     value_format = ("selinuxuser", None)
 
-    def _expected(self):
-        return ("selinuxuser", None)
-    
     def _installargs(self, entry):
         return (entry.get("name"), entry.get("selinuxuser"), "")
 
@@ -452,9 +413,6 @@ class SELinuxUserHandler(SELinuxEntryHandler):
             self._records = seobject.seluserRecords()
         return self._records
 
-    def _expected(self):
-        return ("prefix", None, None, "roles")
-    
     def _installargs(self, entry):
         roles = entry.get("roles", "").replace(" ", ",").split(",")
         return (entry.get("name"), roles, '', '', entry.get("prefix"))
@@ -466,9 +424,6 @@ class SELinuxInterfaceHandler(SELinuxEntryHandler):
 
     def _installargs(self, entry):
         return (entry.get("name"), '', entry.get("selinuxtype"))
-
-    def _expected(self):
-        return (None, None, entry.get("selinuxtype"), None)
 
 
 class SELinuxPermissiveHandler(SELinuxEntryHandler):
@@ -502,6 +457,7 @@ class SELinuxPermissiveHandler(SELinuxEntryHandler):
 
 class SELinuxModuleHandler(SELinuxEntryHandler):
     etype = "module"
+    value_format = (None, "disabled")
 
     def __init__(self, tool, logger, setup, config):
         SELinuxEntryHandler.__init__(self, tool, logger, setup, config)
@@ -514,9 +470,6 @@ class SELinuxModuleHandler(SELinuxEntryHandler):
             self._all = dict([(m[0], (m[1], m[2]))
                              for m in self.records.get_all()])
         return self._all
-
-    def _expected(self):
-        return (None, "disabled")
 
     def _filepath(self, entry):
         if entry.get("name").endswith(".pp"):
