@@ -81,6 +81,9 @@ class SELinux(Bcfg2.Client.Tools.Tool):
         
 class SELinuxEntryHandler(object):
     etype = None
+    key_format = ("name")
+    value_format = ()
+    str_format = '%(name)'
     
     def __init__(self, tool, logger, setup, config):
         self.tool = tool
@@ -101,25 +104,50 @@ class SELinuxEntryHandler(object):
         return self._all
 
     def tostring(self, entry):
-        return entry.get("name")
+        return self.str_format % self._entry2attrs(entry)
+
+    def keytostring(self, key):
+        return self.str_format % self._key2attrs(key)
 
     def _key(self, entry):
-        return entry.get("name")
+        rv = []
+        for key in self.key_format:
+            rv.append(entry.get(key))
+        return tuple(rv)
 
     def _key2attrs(self, key):
         if isinstance(key, tuple):
-            return dict(name=key[0])
+            rv = dict((self.key_format[i], key[i])
+                      for i in range(len(self.key_format))
+                      if self.key_format[i])
         else:
-            return dict(name=key)
+            rv = dict(name=key)
+        if self.value_format == "selinuxtype":
+            rv["selinuxtype"] = ":".join(self.all_records[key])
+        elif self.value_format:
+            vals = self.all_records[key]
+            rv.update(dict((self.value_format[i], vals[i])
+                           for i in range(len(self.value_format))
+                           if self.value_format[i]))
+        return rv
+
+    def _entry2attrs(self, entry):
+        vals = self._key(entry)
+        return dict([(key, vals[key]) for key in self.key_format])
+
+    def key2entry(self, key):
+        attrs = self._key2attrs(key)
+        attrs["type"] = self.etype
+        return Bcfg2.Client.XML.Element("SELinux", **attrs)
 
     def _installargs(self, entry):
-        return ()
+        raise NotImplementedError
 
     def _deleteargs(self, entry):
         return (self._key(entry))
 
     def _expected(self):
-        return ()
+        raise NotImplementedError
 
     def canInstall(self, entry):
         return True
@@ -130,20 +158,25 @@ class SELinuxEntryHandler(object):
                               (self.etype, self.tostring(entry)))
             return False
         return True
+
+    def _verify_attr(self, entry, record, key, attr, value):
+        return value == self.get(attr)
     
     def Verify(self, entry):
-        if not self.exists():
+        if not self.exists(entry):
             entry.set('current_exists', 'false')
             return False
 
         errors = []
         expected = self._expected(self)
-        record = self.all_records[self._key(entry)]
+        key = self._key(entry)
+        record = self.all_records[key]
         for idx in range(0, len(expected)):
             attr = expected[idx]
+            if not attr:
+                continue
             current = record[idx]
-            desired = self.get(attr)
-            if desired and current != desired:
+            if not self._verify_attr(entry, record, key, attr, current):
                 entry.set('current_%s' % attr, current)
                 errors.append("SELinux %s %s has wrong %s: %s, should be %s" %
                               (self.etype, self.tostring(entry), attr,
@@ -185,15 +218,13 @@ class SELinuxEntryHandler(object):
             except ValueError:
                 err = sys.exc_info()[1]
                 self.logger.info("Failed to remove SELinux %s %s: %s" %
-                                 (self.etype, entry.get('name'), err))
+                                 (self.etype, self.tostring(entry), err))
 
     def FindExtra(self):
-        self.logger.debug("Found SELinux %ss:" % self.etype)
-        self.logger.debug(self.all_records.keys())
         specified = [self._key(e)
                      for e in self.tool.getSupportedEntries()
                      if e.type == self.etype]
-        return [Bcfg2.Client.XML.Element('SELinux', **self._key2attrs(key))
+        return [self.key2entry(key)
                 for key in self.all_records.keys()
                 if key not in specified]
 
@@ -203,6 +234,19 @@ class SELinuxEntryHandler(object):
 
 class SELinuxBooleanHandler(SELinuxEntryHandler):
     etype = "boolean"
+
+    def _verify_attr(self, entry, record, key, attr, value):
+        return ((value and entry.get("attr") == "on") or
+                (not value and entry.get("attr") == "off"))
+
+    def _key2attrs(self, key):
+        rv = SELinuxEntryHandler._key2attrs(self, key)
+        status = self.all_records[key][0]
+        if status:
+            rv['value'] = "on"
+        else:
+            rv['value'] = "off"
+        return rv
 
     def canInstall(self, entry):
         return self.exists(entry)
@@ -233,6 +277,8 @@ class SELinuxBooleanHandler(SELinuxEntryHandler):
 
 class SELinuxPortHandler(SELinuxEntryHandler):
     etype = "port"
+    str_format = '%(name)/%(proto)'
+    value_format = ('selinuxtype', None)
     
     @property
     def all_records(self):
@@ -266,10 +312,11 @@ class SELinuxPortHandler(SELinuxEntryHandler):
             port = str(key[0])
         else:
             port = "%s:%s" % (key[0], key[1])
-        return dict(name=port, proto=key[2])
+        vals = self.all_records[key]
+        return dict(name=port, proto=key[2], selinuxtype=vals[0])
 
-    def tostring(self, entry):
-        return "%s/%s" % (entry.get('name'), entry.get('proto'))
+    def _entry2attrs(self, entry):
+        return dict(name=entry.get("name"), proto=entry.get("proto"))
 
     def _expected(self):
         return ("selinuxtype", None)
@@ -284,6 +331,8 @@ class SELinuxPortHandler(SELinuxEntryHandler):
 
 class SELinuxFcontextHandler(SELinuxEntryHandler):
     etype = "fcontext"
+    key_format = ("name", "filetype")
+    value_format = "selinuxtype"
     filetypeargs = dict(all="",
                         regular="--",
                         directory="-d",
@@ -324,25 +373,28 @@ class SELinuxFcontextHandler(SELinuxEntryHandler):
                 self.filetypenames[entry.get("filetype", "all")])
 
     def _key2attrs(self, key):
-        return dict(name=key[0], filetype=self.filetypeattrs[key[1]])
+        rv = dict(name=key[0], filetype=self.filetypeattrs[key[1]])
+        vals = self.all_records[key]
+        if vals:
+            rv["selinuxtype"] = ":".join(self.all_records[key])
+        else:
+            rv["selinuxtype"] = "<<none>>"
+        return rv
 
     def _expected(self):
         return (None, None, "selinuxtype", None)
 
     def _installargs(self, entry):
         return (entry.get("name"), entry.get("selinuxtype"),
-                self.filetypeargs(entry.get("filetype", "all")),
+                self.filetypeargs[entry.get("filetype", "all")],
                 '', '')
         
 
 class SELinuxNodeHandler(SELinuxEntryHandler):
     etype = "node"
-
-    def _key(self, entry):
-        return (entry.get("name"), entry.get("netmask"), entry.get("proto"))
-
-    def _key2attrs(self, key):
-        return dict(name=key[0], netmask=key[1], proto=key[2])
+    key_format = ("name", "netmask", "proto")
+    value_format = "selinuxtype"
+    str_format = '%(name)/%(netmask) (%(proto))'
 
     def _expected(self):
         return (None, None, "selinuxtype", None)
@@ -354,6 +406,7 @@ class SELinuxNodeHandler(SELinuxEntryHandler):
 
 class SELinuxLoginHandler(SELinuxEntryHandler):
     etype = "login"
+    value_format = ("selinuxuser", None)
 
     def _expected(self):
         return ("selinuxuser", None)
@@ -364,6 +417,7 @@ class SELinuxLoginHandler(SELinuxEntryHandler):
 
 class SELinuxUserHandler(SELinuxEntryHandler):
     etype = "user"
+    value_format = ("prefix", None, None, "roles")
 
     @property
     def records(self):
@@ -381,6 +435,7 @@ class SELinuxUserHandler(SELinuxEntryHandler):
 
 class SELinuxInterfaceHandler(SELinuxEntryHandler):
     etype = "interface"
+    value_format = "selinuxtype"
 
     def _installargs(self, entry):
         return (entry.get("name"), '', entry.get("selinuxtype"))
@@ -408,7 +463,7 @@ class SELinuxPermissiveHandler(SELinuxEntryHandler):
             if self.records == False:
                 self._all = dict()
             else:
-                # permissionRecords.get_all() returns a list, so we just
+                # permissiveRecords.get_all() returns a list, so we just
                 # make it into a dict so that the rest of
                 # SELinuxEntryHandler works
                 self._all = dict([(d, d) for d in self.records.get_all()])
@@ -419,6 +474,8 @@ class SELinuxPermissiveHandler(SELinuxEntryHandler):
 
 
 class SELinuxModuleHandler(SELinuxEntryHandler):
+    etype = "module"
+
     def __init__(self, tool, logger, setup, config):
         SELinuxEntryHandler.__init__(self, tool, logger, setup, config)
         self.posixtool = Bcfg2.Client.Tools.POSIX.POSIX(logger, setup, config)

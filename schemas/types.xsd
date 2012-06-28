@@ -155,6 +155,13 @@
     </xsd:restriction>
   </xsd:simpleType>
 
+  <xsd:simpleType name='SELinuxBooleanEnum'>
+    <xsd:restriction base='xsd:string'>
+      <xsd:enumeration value='on'/>
+      <xsd:enumeration value='off'/>
+    </xsd:restriction>
+  </xsd:simpleType>
+
   <xsd:simpleType name='SELinuxEntryTypeEnum'>
     <xsd:restriction base='xsd:string'>
       <xsd:enumeration value='boolean'/>
@@ -178,7 +185,7 @@
   <xsd:complexType name="SELinuxType">
     <xsd:attribute type="xsd:string" name="name" use="required"/>
     <xsd:attribute type="SELinuxEntryTypeEnum" name="type" use="required"/>
-    <xsd:attribute type="xsd:boolean" name="value"/>
+    <xsd:attribute type="SELinuxBooleanValueEnum" name="value"/>
     <xsd:attribute type="xsd:boolean" name="disabled"/>
     <xsd:attribute type="xsd:string" name="selinuxtype"/>
     <xsd:attribute type="SELinuxFileTypeEnum" name="filetype"/>
