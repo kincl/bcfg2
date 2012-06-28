@@ -1,6 +1,6 @@
 import os
+import sys
 import copy
-import selinux
 import seobject
 import Bcfg2.Client.XML
 import Bcfg2.Client.Tools
@@ -125,9 +125,7 @@ class SELinuxEntryHandler(object):
                       if self.key_format[i])
         else:
             rv = dict(name=key)
-        if self.value_format == "selinuxtype":
-            rv["selinuxtype"] = ":".join(self.all_records[key])
-        elif self.value_format:
+        if self.value_format:
             vals = self.all_records[key]
             rv.update(dict((self.value_format[i], vals[i])
                            for i in range(len(self.value_format))
@@ -163,11 +161,9 @@ class SELinuxEntryHandler(object):
         errors = []
         current_attrs = self._key2attrs(self._key(entry))
         desired_attrs = entry.attrib
-        if self.value_format == 'selinuxtype':
-            compare = ['selinuxtype']
-        else:
-            compare = [v for v in self.value_format if v]
-        for attr in compare:
+        for attr in self.value_format:
+            if not attr:
+                continue
             if current_attrs[attr] != desired_attrs[attr]:
                 entry.set('current_%s' % attr, current_attrs[attr])
                 errors.append("SELinux %s %s has wrong %s: %s, should be %s" %
@@ -251,29 +247,18 @@ class SELinuxBooleanHandler(SELinuxEntryHandler):
             rv['value'] = "off"
         return rv
 
+    def _installargs(self, entry):
+        return (entry.get("name"), entry.get("value").lower() == "on")
+
     def canInstall(self, entry):
-        return self.exists(entry)
-    
-    def Install(self, entry):
-        boolean = entry.get("name")
-        # we do this using the non-OO interface (selinux instead of
-        # seobject) because it supports transactions even in older
-        # versions.  the seobject interface only supports transactions
-        # in recent versions
-        rv = selinux.security_set_boolean(boolean, bool(entry.get("value")))
-        if rv == -1:
-            self.logger.debug("Error setting value of SELinux boolean %s" %
-                              boolean)
+        if entry.get("value").lower() not in ["on", "off"]:
+            self.logger.debug("SELinux %s %s has a bad value: %s" %
+                              (self.etype, self.tostring(entry),
+                               entry.get("value")))
             return False
-        elif bool(rv):
-            self.booleans_changed = True
-        return bool(rv)
-
-    def BundleUpdated(self, _, states):
-        if self.booleans_changed:
-            # commit boolean changes
-            selinux.security_commit_booleans()
-
+        return (self.exists(entry) and
+                SELinuxEntryHandler.canInstall(self, entry))
+    
 
 class SELinuxPortHandler(SELinuxEntryHandler):
     etype = "port"
@@ -326,7 +311,7 @@ class SELinuxPortHandler(SELinuxEntryHandler):
 class SELinuxFcontextHandler(SELinuxEntryHandler):
     etype = "fcontext"
     key_format = ("name", "filetype")
-    value_format = "selinuxtype"
+    value_format = (None, None, "selinuxtype", None)
     filetypeargs = dict(all="",
                         regular="--",
                         directory="-d",
@@ -363,8 +348,9 @@ class SELinuxFcontextHandler(SELinuxEntryHandler):
         return self._all
 
     def _key(self, entry):
+        ftype = entry.get("filetype", "all")
         return (entry.get("name"),
-                self.filetypenames[entry.get("filetype", "all")])
+                self.filetypenames.get(ftype, ftype))
 
     def _key2attrs(self, key):
         rv = dict(name=key[0], filetype=self.filetypeattrs[key[1]])
@@ -373,10 +359,14 @@ class SELinuxFcontextHandler(SELinuxEntryHandler):
         # type is the single value None; in newer versions, it's a
         # tuple whose 0th (and only) value is None.
         if vals and vals[0]:
-            rv["selinuxtype"] = ":".join(self.all_records[key])
+            rv["selinuxtype"] = vals[2]
         else:
             rv["selinuxtype"] = "<<none>>"
         return rv
+
+    def canInstall(self, entry):
+        return (entry.get("filetype", "all") in self.filetypeargs and
+                SELinuxEntryHandler.canInstall(self, entry))
 
     def _installargs(self, entry):
         return (entry.get("name"), entry.get("selinuxtype"),
@@ -387,7 +377,7 @@ class SELinuxFcontextHandler(SELinuxEntryHandler):
 class SELinuxNodeHandler(SELinuxEntryHandler):
     etype = "node"
     key_format = ("name", "netmask", "proto")
-    value_format = "selinuxtype"
+    value_format = (None, None, "selinuxtype", None)
     str_format = '%(name)s/%(netmask)s (%(proto)s)'
 
     def _installargs(self, entry):
@@ -420,7 +410,7 @@ class SELinuxUserHandler(SELinuxEntryHandler):
 
 class SELinuxInterfaceHandler(SELinuxEntryHandler):
     etype = "interface"
-    value_format = "selinuxtype"
+    value_format = (None, None, "selinuxtype", None)
 
     def _installargs(self, entry):
         return (entry.get("name"), '', entry.get("selinuxtype"))
