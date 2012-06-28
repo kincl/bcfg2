@@ -224,9 +224,16 @@ class SELinuxEntryHandler(object):
         specified = [self._key(e)
                      for e in self.tool.getSupportedEntries()
                      if e.type == self.etype]
-        return [self.key2entry(key)
-                for key in self.all_records.keys()
-                if key not in specified]
+        print "specified: %s" % specified
+        rv = []
+        for key in self.all_records.keys():
+            print "checking if %s in specified: %s" % (key, key in specified)
+            if key not in specified:
+                rv.append(self.key2entry(key))
+        #return [self.key2entry(key)
+        #        for key in self.all_records.keys()
+        #        if key not in specified]
+        return rv
 
     def BundleUpdated(self, states):
         pass
@@ -234,6 +241,20 @@ class SELinuxEntryHandler(object):
 
 class SELinuxBooleanHandler(SELinuxEntryHandler):
     etype = "boolean"
+
+    @property
+    def all_records(self):
+        # older versions of selinux return a single 0/1 value for each
+        # bool, while newer versions return a list of three 0/1 values
+        # representing various states. we don't care about the latter
+        # two values, but it's easier to coerce the older format into
+        # the newer format as far as interoperation with the rest of
+        # SELinuxEntryHandler goes
+        rv = SELinuxEntryHandler.all_records.fget(self)
+        if rv.values()[0] in [0, 1]:
+            for key, val in rv.items():
+                rv[key] = [val, val, val]
+        return rv
 
     def _verify_attr(self, entry, record, key, attr, value):
         return ((value and entry.get("attr") == "on") or
@@ -375,7 +396,10 @@ class SELinuxFcontextHandler(SELinuxEntryHandler):
     def _key2attrs(self, key):
         rv = dict(name=key[0], filetype=self.filetypeattrs[key[1]])
         vals = self.all_records[key]
-        if vals:
+        # in older versions of selinux, an fcontext with no selinux
+        # type is the single value None; in newer versions, it's a
+        # tuple whose 0th (and only) value is None.
+        if vals and vals[0]:
             rv["selinuxtype"] = ":".join(self.all_records[key])
         else:
             rv["selinuxtype"] = "<<none>>"
