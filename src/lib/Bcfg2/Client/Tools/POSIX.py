@@ -219,7 +219,14 @@ class POSIX(Bcfg2.Client.Tools.Tool):
                    ('Path', 'nonexistent'),
                    ('Path', 'permissions'),
                    ('Path', 'symlink')]
-    __req__ = {'Path': ['name', 'type']}
+    __req__ = dict(Path=dict(
+            device=['name', 'dev_type', 'perms', 'owner', 'group'],
+            directory=['name', 'perms', 'owner', 'group'],
+            file=['name', 'perms', 'owner', 'group'],
+            hardlink=['name', 'to'],
+            nonexistent=['name'],
+            permissions=['name', 'perms', 'owner', 'group'],
+            symlink=['name', 'to']))
 
     # grab paranoid options from /etc/bcfg2.conf
     opts = {'ppath': Bcfg2.Options.PARANOID_PATH,
@@ -677,12 +684,6 @@ class POSIX(Bcfg2.Client.Tools.Tool):
 
     def Verifyhardlink(self, entry, _):
         """Verify HardLink entry."""
-        if entry.get('to') == None:
-            self.logger.error('Entry %s not completely specified. '
-                              'Try running bcfg2-lint.' % \
-                              (entry.get('name')))
-            return False
-
         rv = True
 
         try:
@@ -700,10 +701,6 @@ class POSIX(Bcfg2.Client.Tools.Tool):
 
     def Installhardlink(self, entry):
         """Install HardLink entry."""
-        if entry.get('to') == None:
-            self.logger.error('Entry %s not completely specified. '
-                              'Try running bcfg2-lint.' % entry.get('name'))
-            return False
         self.logger.info("Installing Hardlink %s" % entry.get('name'))
         if os.path.lexists(entry.get('name')):
             try:
@@ -777,7 +774,7 @@ class POSIX(Bcfg2.Client.Tools.Tool):
         """Verify Path type='permissions' entry"""
         rv = self._verify_metadata(entry)
         
-        if entry.get('recursive') in ['True', 'true']:
+        if entry.get('recursive', 'false').lower() == 'true':
             # verify ownership information recursively
             for root, dirs, files in os.walk(entry.get('name')):
                 for p in dirs + files:
@@ -881,14 +878,6 @@ class POSIX(Bcfg2.Client.Tools.Tool):
         if path is None:
             path = entry.get('name')
         
-        if (entry.get('perms') == None or
-            entry.get('owner') == None or
-            entry.get('group') == None):
-            self.logger.error('POSIX: Entry %s:%s not completely specified. '
-                              'Try running bcfg2-lint.' % (entry.get('type'),
-                                                           entry.get('name')))
-            return False
-
         while len(entry.get('perms', '')) < 4:
             entry.set('perms', '0' + entry.get('perms', ''))
 

@@ -149,8 +149,15 @@ class Tool:
                                entry.get('failure')))
             return False
 
-        missing = [attr for attr in self.__req__[entry.tag] \
-                   if attr not in entry.attrib]
+        required = self.__req__[entry.tag]
+        if isinstance(required, dict):
+            required = ["type"]
+            try:
+                required.extend(self.__req__[entry.tag][entry.get("type")])
+            except KeyError:
+                pass
+                
+        missing = [attr for attr in required if attr not in entry.attrib]
         if missing:
             self.logger.error("Incomplete information for entry %s:%s; cannot verify" \
                               % (entry.tag, entry.get('name')))

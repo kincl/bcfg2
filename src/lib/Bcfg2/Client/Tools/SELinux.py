@@ -18,16 +18,15 @@ class SELinux(Bcfg2.Client.Tools.Tool):
                    ('SELinux', 'interface'),
                    ('SELinux', 'permissive'),
                    ('SELinux', 'module')]
-    __req__ = {'SELinux': {
-        'boolean': ['name', 'value'],
-        'module': ['name', '__text__'],
-        'port': ['name', 'selinuxtype', 'proto'],
-        'fcontext': ['name', 'selinuxtype'],
-        'node': ['name', 'selinuxtype', 'proto'],
-        'login': ['name', 'selinuxuser'],
-        'user': ['name'],
-        'interface': ['name', 'selinuxtype'],
-        'permissive': ['name'],}}
+    __req__ = dict(SELinux=dict(boolean=['name', 'value'],
+                                module=['name', '__text__'],
+                                port=['name', 'selinuxtype', 'proto'],
+                                fcontext=['name', 'selinuxtype'],
+                                node=['name', 'selinuxtype', 'proto'],
+                                login=['name', 'selinuxuser'],
+                                user=['name'],
+                                interface=['name', 'selinuxtype'],
+                                permissive=['name']))
 
     def __init__(self, logger, setup, config):
         Bcfg2.Client.Tools.Tool.__init__(self, logger, setup, config)
@@ -58,7 +57,7 @@ class SELinux(Bcfg2.Client.Tools.Tool):
 
     def VerifySELinux(self, entry, _):
         """Dispatch verify to the proper method according to type"""
-        rv = self.handler[entry.get('type')].Verify(entry)
+        rv = self.handlers[entry.get('type')].Verify(entry)
         if entry.get('qtext') and self.setup['interactive']:
             entry.set('qtext',
                       '%s\nInstall SELinux %s %s: (y/N) ' %
@@ -83,7 +82,7 @@ class SELinuxEntryHandler(object):
     etype = None
     key_format = ("name")
     value_format = ()
-    str_format = '%(name)'
+    str_format = '%(name)s'
     
     def __init__(self, tool, logger, setup, config):
         self.tool = tool
@@ -133,7 +132,8 @@ class SELinuxEntryHandler(object):
 
     def _entry2attrs(self, entry):
         vals = self._key(entry)
-        return dict([(key, vals[key]) for key in self.key_format])
+        return dict([(self.key_format[i], vals[i])
+                     for i in range(len(self.key_format))])
 
     def key2entry(self, key):
         attrs = self._key2attrs(key)
@@ -159,8 +159,8 @@ class SELinuxEntryHandler(object):
             return False
         return True
 
-    def _verify_attr(self, entry, record, key, attr, value):
-        return value == self.get(attr)
+    def _get_desired_value(self, entry, attr, record, key):
+        return entry.get(attr)
     
     def Verify(self, entry):
         if not self.exists(entry):
@@ -168,7 +168,7 @@ class SELinuxEntryHandler(object):
             return False
 
         errors = []
-        expected = self._expected(self)
+        expected = self._expected()
         key = self._key(entry)
         record = self.all_records[key]
         for idx in range(0, len(expected)):
@@ -176,7 +176,8 @@ class SELinuxEntryHandler(object):
             if not attr:
                 continue
             current = record[idx]
-            if not self._verify_attr(entry, record, key, attr, current):
+            desired = self._get_desired_value(entry, attr, record, key)
+            if current != desired:
                 entry.set('current_%s' % attr, current)
                 errors.append("SELinux %s %s has wrong %s: %s, should be %s" %
                               (self.etype, self.tostring(entry), attr,
@@ -184,7 +185,7 @@ class SELinuxEntryHandler(object):
 
         if errors:
             for error in errors:
-                self.logger.debug(msg)
+                self.logger.debug(error)
             entry.set('qtext', "\n".join([entry.get('qtext', '')] + errors))
             return False
         else:
@@ -256,9 +257,11 @@ class SELinuxBooleanHandler(SELinuxEntryHandler):
                 rv[key] = [val, val, val]
         return rv
 
-    def _verify_attr(self, entry, record, key, attr, value):
-        return ((value and entry.get("attr") == "on") or
-                (not value and entry.get("attr") == "off"))
+    def _get_desired_value(self, entry, attr, record, key):
+        if entry.get("attr") == "on":
+            return 1
+        else:
+            return 0
 
     def _key2attrs(self, key):
         rv = SELinuxEntryHandler._key2attrs(self, key)
@@ -298,7 +301,7 @@ class SELinuxBooleanHandler(SELinuxEntryHandler):
 
 class SELinuxPortHandler(SELinuxEntryHandler):
     etype = "port"
-    str_format = '%(name)/%(proto)'
+    str_format = '%(name)s/%(proto)s'
     value_format = ('selinuxtype', None)
     
     @property
@@ -418,7 +421,7 @@ class SELinuxNodeHandler(SELinuxEntryHandler):
     etype = "node"
     key_format = ("name", "netmask", "proto")
     value_format = "selinuxtype"
-    str_format = '%(name)/%(netmask) (%(proto))'
+    str_format = '%(name)s/%(netmask)s (%(proto)s)'
 
     def _expected(self):
         return (None, None, "selinuxtype", None)
