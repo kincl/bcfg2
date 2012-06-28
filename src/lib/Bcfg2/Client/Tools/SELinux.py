@@ -24,7 +24,7 @@ class SELinux(Bcfg2.Client.Tools.Tool):
                                 fcontext=['name', 'selinuxtype'],
                                 node=['name', 'selinuxtype', 'proto'],
                                 login=['name', 'selinuxuser'],
-                                user=['name'],
+                                user=['name', 'roles', 'prefix'],
                                 interface=['name', 'selinuxtype'],
                                 permissive=['name']))
 
@@ -50,6 +50,20 @@ class SELinux(Bcfg2.Client.Tools.Tool):
     def canInstall(self, entry):
         return (Bcfg2.Client.Tools.Tool.canInstall(self, entry) and
                 self.handlers[entry.get('type')].canInstall(entry))
+
+    def Install(self, entries, states):
+        # start a transaction
+        sr = seobject.semanageRecords("")
+        if hasattr(sr, "start"):
+            self.logger.debug("Starting SELinux transaction")
+            sr.start()
+        else:
+            self.logger.debug("SELinux transactions not supported; this may "
+                              "slow things down considerably")
+        Bcfg2.Client.Tools.Tool.Install(self, entries, states)
+        if hasattr(sr, "finish"):
+            self.logger.debug("Committing SELinux transaction")
+            sr.finish()
 
     def InstallSELinux(self, entry):
         """Dispatch install to the proper method according to type"""
@@ -248,7 +262,14 @@ class SELinuxBooleanHandler(SELinuxEntryHandler):
         return rv
 
     def _installargs(self, entry):
-        return (entry.get("name"), entry.get("value").lower() == "on")
+        # the only values recognized by both new and old versions of
+        # selinux are the strings "0" and "1".  old selinux accepts
+        # ints or bools as well, new selinux accepts "on"/"off"
+        if entry.get("value").lower() == "on":
+            value = "1"
+        else:
+            value = "0"
+        return (entry.get("name"), value)
 
     def canInstall(self, entry):
         if entry.get("value").lower() not in ["on", "off"]:
@@ -285,8 +306,8 @@ class SELinuxPortHandler(SELinuxEntryHandler):
 
     def _key(self, entry):
         port = entry.get("name")
-        if ":" in port:
-            start, end = port.split(":")
+        if "-" in port:
+            start, end = port.split("-")
         else:
             start = port
             end = port
@@ -296,7 +317,7 @@ class SELinuxPortHandler(SELinuxEntryHandler):
         if key[0] == key[1]:
             port = str(key[0])
         else:
-            port = "%s:%s" % (key[0], key[1])
+            port = "%s-%s" % (key[0], key[1])
         vals = self.all_records[key]
         return dict(name=port, proto=key[2], selinuxtype=vals[0])
 
@@ -404,8 +425,17 @@ class SELinuxUserHandler(SELinuxEntryHandler):
         return self._records
 
     def _installargs(self, entry):
-        roles = entry.get("roles", "").replace(" ", ",").split(",")
-        return (entry.get("name"), roles, '', '', entry.get("prefix"))
+        # in older versions of selinux, modify() is broken if you
+        # provide a prefix _at all_, so we try to avoid giving the
+        # prefix
+        rv = [entry.get("name"),
+              entry.get("roles", "").replace(" ", ",").split(",")]
+        key = self._key(entry)
+        if key in self.all_records:
+            attrs = self._key2attrs(key)
+            if attrs['prefix'] != entry.get("prefix"):
+                rv.extend(['', '', entry.get("prefix")])
+        return tuple(rv)
 
 
 class SELinuxInterfaceHandler(SELinuxEntryHandler):
