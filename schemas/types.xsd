@@ -145,7 +145,7 @@
   <xsd:simpleType name='SELinuxFileTypeEnum'>
     <xsd:restriction base='xsd:string'>
       <xsd:enumeration value='all'/>
-      <xsd:enumeration value='normal'/>
+      <xsd:enumeration value='regular'/>
       <xsd:enumeration value='directory'/>
       <xsd:enumeration value='symlink'/>
       <xsd:enumeration value='pipe'/>
@@ -155,7 +155,7 @@
     </xsd:restriction>
   </xsd:simpleType>
 
-  <xsd:simpleType name='SELinuxBooleanEnum'>
+  <xsd:simpleType name='SELinuxBooleanValueEnum'>
     <xsd:restriction base='xsd:string'>
       <xsd:enumeration value='on'/>
       <xsd:enumeration value='off'/>

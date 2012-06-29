@@ -332,6 +332,11 @@ MDATA_PERMS = \
            default='644',
            odesc='octal permissions',
            cf=('mdata', 'perms'))
+MDATA_SECONTEXT = \
+    Option('Default SELinux context',
+           default='__default__',
+           odesc='SELinux context',
+           cf=('mdata', 'secontext'))
 MDATA_PARANOID = \
     Option('Default Path paranoid setting',
            default='true',
