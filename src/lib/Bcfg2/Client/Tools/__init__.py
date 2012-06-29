@@ -179,6 +179,11 @@ class Tool:
         """Return a list of extra entries."""
         return []
 
+    def primarykey(self, entry):
+        """ return a string that should be unique amongst all entries
+        in the specification """
+        return "%s:%s" % (entry.tag, entry.get("name"))
+
     def canInstall(self, entry):
         """Test if entry has enough information to be installed."""
         if not self.handlesEntry(entry):

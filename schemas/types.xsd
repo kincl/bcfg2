@@ -189,7 +189,6 @@
     <xsd:attribute type="xsd:boolean" name="disabled"/>
     <xsd:attribute type="xsd:string" name="selinuxtype"/>
     <xsd:attribute type="SELinuxFileTypeEnum" name="filetype"/>
-    <xsd:attribute type="xsd:string" name="netmask"/>
     <xsd:attribute type="xsd:string" name="proto"/>
     <xsd:attribute type="xsd:string" name="roles"/>
     <xsd:attribute type="xsd:string" name="prefix"/>

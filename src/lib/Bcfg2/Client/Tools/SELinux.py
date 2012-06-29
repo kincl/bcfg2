@@ -1,6 +1,8 @@
 import os
 import sys
 import copy
+import struct
+import socket
 import seobject
 import Bcfg2.Client.XML
 import Bcfg2.Client.Tools
@@ -20,7 +22,7 @@ class SELinux(Bcfg2.Client.Tools.Tool):
                    ('SELinux', 'module')]
     __req__ = dict(SELinux=dict(boolean=['name', 'value'],
                                 module=['name', '__text__'],
-                                port=['name', 'selinuxtype', 'proto'],
+                                port=['name', 'selinuxtype'],
                                 fcontext=['name', 'selinuxtype'],
                                 node=['name', 'selinuxtype', 'proto'],
                                 login=['name', 'selinuxuser'],
@@ -50,6 +52,11 @@ class SELinux(Bcfg2.Client.Tools.Tool):
     def canInstall(self, entry):
         return (Bcfg2.Client.Tools.Tool.canInstall(self, entry) and
                 self.handlers[entry.get('type')].canInstall(entry))
+
+    def primarykey(self, entry):
+        """ return a string that should be unique amongst all entries
+        in the specification """
+        return self.handlers[entry.get('type')].primarykey(entry)
 
     def Install(self, entries, states):
         # start a transaction
@@ -158,8 +165,11 @@ class SELinuxEntryHandler(object):
         return (self._key(entry))
 
     def canInstall(self, entry):
-        return True
+        return bool(self._key(entry))
     
+    def primarykey(self, entry):
+        return ":".join([entry.tag, entry.get("type"), entry.get("name")])
+
     def exists(self, entry):
         if self._key(entry) not in self.all_records:
             self.logger.debug("SELinux %s %s does not exist" %
@@ -283,7 +293,6 @@ class SELinuxBooleanHandler(SELinuxEntryHandler):
 
 class SELinuxPortHandler(SELinuxEntryHandler):
     etype = "port"
-    str_format = '%(name)s/%(proto)s'
     value_format = ('selinuxtype', None)
     
     @property
@@ -305,13 +314,18 @@ class SELinuxPortHandler(SELinuxEntryHandler):
         return self._all
 
     def _key(self, entry):
-        port = entry.get("name")
+        try:
+            (port, proto) = entry.get("name").split("/")
+        except ValueError:
+            self.logger.error("Invalid SELinux node %s: no protocol specified" %
+                              entry.get("name"))
+            return
         if "-" in port:
             start, end = port.split("-")
         else:
             start = port
             end = port
-        return (int(start), int(end), entry.get("proto"))
+        return (int(start), int(end), proto)
     
     def _key2attrs(self, key):
         if key[0] == key[1]:
@@ -319,14 +333,14 @@ class SELinuxPortHandler(SELinuxEntryHandler):
         else:
             port = "%s-%s" % (key[0], key[1])
         vals = self.all_records[key]
-        return dict(name=port, proto=key[2], selinuxtype=vals[0])
+        return dict(name="%s/%s" % (port, key[2]), selinuxtype=vals[0])
 
     def _installargs(self, entry):
-        return (entry.get("name"), entry.get("proto"), '',
-                entry.get("selinuxtype"))
+        (port, proto) = entry.get("name").split("/")
+        return (port, proto, '', entry.get("selinuxtype"))
 
     def _deleteargs(self, entry):
-        return (entry.get("name"), entry.get("proto"))
+        return tuple(entry.get("name").split("/"))
 
 
 class SELinuxFcontextHandler(SELinuxEntryHandler):
@@ -393,17 +407,51 @@ class SELinuxFcontextHandler(SELinuxEntryHandler):
         return (entry.get("name"), entry.get("selinuxtype"),
                 self.filetypeargs[entry.get("filetype", "all")],
                 '', '')
+
+    def primarykey(self, entry):
+        return ":".join([entry.tag, entry.get("type"), entry.get("name"),
+                         entry.get("filetype", "all")])
         
 
 class SELinuxNodeHandler(SELinuxEntryHandler):
     etype = "node"
-    key_format = ("name", "netmask", "proto")
     value_format = (None, None, "selinuxtype", None)
-    str_format = '%(name)s/%(netmask)s (%(proto)s)'
+    str_format = '%(name)s (%(proto)s)'
+
+    def _netmask_to_dotted_quad(self, netmask, proto="ipv4"):
+        try:
+            # see if netmask is an integer (e.g., /16) and if so
+            # convert to dotted-quad notation
+            int(netmask)
+            if proto == "ipv4":
+                int_nm = 0L
+                for n in range(netmask):
+                    res |= 1<<31 - n
+                netmask = socket.inet_ntoa(struct.pack('>L', res))
+            else: # ipv6
+                pass # todo
+        except ValueError:
+            pass
+        return netmask
+
+    def _key(self, entry):
+        try:
+            (addr, netmask) = entry.get("name").split("/")
+        except ValueError:
+            self.logger.error("Invalid SELinux node %s: no netmask specified" %
+                              entry.get("name"))
+            return
+        netmask = self._netmask_to_dotted_quad(netmask, proto=entry.get("proto"))
+        return (addr, netmask, entry.get("proto"))
+    
+    def _key2attrs(self, key):
+        vals = self.all_records[key]
+        return dict(name="%s/%s" % (key[0], key[1]), proto=key[2],
+                    selinuxtype=vals[2])
 
     def _installargs(self, entry):
-        return (entry.get("name"), entry.get("netmask"),
-                entry.get("proto"), "", entry.get("selinuxtype"))
+        (addr, netmask) = entry.get("name").split("/")
+        return (addr, netmask, entry.get("proto"), "", entry.get("selinuxtype"))
 
 
 class SELinuxLoginHandler(SELinuxEntryHandler):
