@@ -217,6 +217,10 @@ The Path tag has different values depending on the *type* attribute of
 the path specified in your configuration. Below is a set of tables which
 describe the attributes available for various Path types.
 
+Note that ``secontext`` below expects a full context, not just the
+type.  For instance, "``system_u:object_r:etc_t:s0``", not just
+``etc_t``.
+
 Attributes common to all Path tags:
 
 +----------+---------------------------------------------------+-----------------+
@@ -327,6 +331,10 @@ of tables which describe the attributes available for various SELinux
 types.  The types (except for ``module``) correspond to ``semanage``
 subcommands.
 
+Note that the ``selinuxtype`` attribute takes only an SELinux type,
+not a full context; e.g., "``etc_t``", not
+"``system_u:object_r:etc_t:s0``".
+
 boolean
 ^^^^^^^
 
@@ -335,23 +343,21 @@ boolean
 +=======+======================+=========+==========+
 | name  | Name of the boolean  | String  | Yes      |
 +-------+----------------------+---------+----------+
-| value | Value of the boolean | Boolean | Yes      |
+| value | Value of the boolean | on|off  | Yes      |
 +-------+----------------------+---------+----------+
 
 port
 ^^^^
 
-+-------------+-----------------------+---------------+----------+
-| Name        | Description           | Values        | Required |
-+=============+=======================+===============+==========+
-| name        | Port number or range  | Integer or    | Yes      |
-|             |                       | ``start-end`` |          |
-+-------------+-----------------------+---------------+----------+
-| selinuxtype | SELinux context type  | String        | Yes      |
-|             | to apply to this port |               |          |
-+-------------+-----------------------+---------------+----------+
-| proto       | Protocol              | (tcp|udp)     | Yes      |
-+-------------+-----------------------+---------------+----------+
++-------------+------------------------+---------------------------+----------+
+| Name        | Description            | Values                    | Required |
++=============+========================+===========================+==========+
+| name        | Port number or range   | ``<port>/<proto>`` or     | Yes      |
+|             | and protocol (tcp|udp) | ``<start>-<end>/<proto>`` |          |
++-------------+------------------------+---------------------------+----------+
+| selinuxtype | SELinux type to apply  | String                    | Yes      |
+|             | to this port           |                           |          |
++-------------+------------------------+---------------------------+----------+
 
 fcontext
 ^^^^^^^^
@@ -361,30 +367,31 @@ fcontext
 +=============+=========================+=====================+==========+
 | name        | File specification      | String              | Yes      |
 +-------------+-------------------------+---------------------+----------+
-| selinuxtype | SELinux context to      | String              | Yes      |
-|             | apply to files matching |                     |          |
-|             | this specification      |                     |          |
+| selinuxtype | SELinux type to apply   | String              | Yes      |
+|             | to files matching this  |                     |          |
+|             | specification           |                     |          |
 +-------------+-------------------------+---------------------+----------+
-| filetype    | File type to match      | (regular|directory| | No       |
-|             |                         |  symlink|pipe|      |          |
+| filetype    | File type to match.     | (regular|directory| | No       |
+|             | Default: all            |  symlink|pipe|all|  |          |
 |             |                         |  socket|block|char) |          |
 +-------------+-------------------------+---------------------+----------+
 
 node
 ^^^^
 
-+-------------+--------------------+-------------+----------+
-| Name        | Description        | Values      | Required |
-+=============+====================+=============+==========+
-| name        | IP address of node | String      | Yes      |
-+-------------+--------------------+-------------+----------+
-| selinuxtype | SELinux context to | String      | Yes      |
-|             | apply to this node |             |          |
-+-------------+--------------------+-------------+----------+
-| proto       | Protocol           | (ipv4|ipv6) | Yes      |
-+-------------+--------------------+-------------+----------+
-| netmask     | Netmask            | String      | Yes      |
-+-------------+--------------------+-------------+----------+
++-------------+------------------------------------+------------------+----------+
+| Name        | Description                        | Values           | Required |
++=============+====================================+==================+==========+
+| name        | IP address and netmask of node.    | <addr>/<netmask> | Yes      |
+|             | Netmask can be numeric (/16) or    |                  |          |
+|             | dotted-quad (/255.255.0.0)         |                  |          |
++-------------+------------------------------------+------------------+----------+
+| selinuxtype | SELinux type to apply to this node | String           | Yes      |
++-------------+------------------------------------+------------------+----------+
+| proto       | Protocol                           | (ipv4|ipv6)      | Yes      |
++-------------+------------------------------------+------------------+----------+
+| netmask     | Netmask                            | String           | Yes      |
++-------------+------------------------------------+------------------+----------+
 
 login
 ^^^^^
@@ -418,8 +425,8 @@ interface
 +=============+=========================+=============+==========+
 | name        | Interface name          | String      | Yes      |
 +-------------+-------------------------+-------------+----------+
-| selinuxtype | SELinux context type to | String      | Yes      |
-|             | apply to this interface |             |          |
+| selinuxtype | SELinux type to apply   | String      | Yes      |
+|             | to this interface       |             |          |
 +-------------+-------------------------+-------------+----------+
 
 permissive
@@ -428,7 +435,7 @@ permissive
 +-------------+------------------------------------+-------------+----------+
 | Name        | Description                        | Values      | Required |
 +=============+====================================+=============+==========+
-| name        | SELinux context to make permissive | String      | Yes      |
+| name        | SELinux type to make permissive    | String      | Yes      |
 +-------------+------------------------------------+-------------+----------+
 
 module
