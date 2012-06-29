@@ -34,23 +34,6 @@ device_map = {'block': stat.S_IFBLK,
               'fifo': stat.S_IFIFO}
 
 
-def calcPerms(initial, perms):
-    """This compares ondisk permissions with specified ones."""
-    pdisp = [{1:stat.S_ISVTX, 2:stat.S_ISGID, 4:stat.S_ISUID},
-             {1:stat.S_IXUSR, 2:stat.S_IWUSR, 4:stat.S_IRUSR},
-             {1:stat.S_IXGRP, 2:stat.S_IWGRP, 4:stat.S_IRGRP},
-             {1:stat.S_IXOTH, 2:stat.S_IWOTH, 4:stat.S_IROTH}]
-    tempperms = initial
-    if len(perms) == 3:
-        perms = '0%s' % (perms)
-    pdigits = [int(perms[digit]) for digit in range(4)]
-    for index in range(4):
-        for (num, perm) in list(pdisp[index].items()):
-            if pdigits[index] & num:
-                tempperms |= perm
-    return tempperms
-
-
 def normGid(entry):
     """
        This takes a group name or gid and
@@ -117,7 +100,7 @@ def secontextMatches(entry):
             return True
         else:
             return False
-    elif selinux.getfilecon(entry.get('name'))[1] == targetContext:
+    elif selinux.getfilecon(entry.get('name'))[1] == context:
         return True
     else:
         return False
@@ -147,7 +130,7 @@ def setSEContext(entry, path=None, recursive=False):
             rv = False
     else:
         try:
-            rv &= lsetfilecon(path, context) == 0
+            rv &= selinux.lsetfilecon(path, context) == 0
         except:
             err = sys.exc_info()[1]
             log.error("Failed to restore SELinux context for %s: %s" %
@@ -158,7 +141,7 @@ def setSEContext(entry, path=None, recursive=False):
             for root, dirs, files in os.walk(path):
                 for p in dirs + files:
                     try:
-                        rv &= lsetfilecon(p, context) == 0
+                        rv &= selinux.lsetfilecon(p, context) == 0
                     except:
                         err = sys.exc_info()[1]
                         log.error("Failed to restore SELinux context for %s: %s"
@@ -192,11 +175,9 @@ def setPerms(entry, path=None):
         logger.error('Failed to change ownership of %s' % path)
         rv = False
 
+    configPerms = int(entry.get('perms'), 8)
     if entry.get('dev_type'):
-        configPerms = calcPerms(device_map[entry.get('dev_type')],
-                                entry.get('perms'))
-    else:
-        configPerms = entry.get('perms')
+        configPerms |= device_map[entry.get('dev_type')]
     try:
         os.chmod(path, configPerms)
     except (OSError, KeyError):
@@ -334,8 +315,7 @@ class POSIX(Bcfg2.Client.Tools.Tool):
         if not exists:
             try:
                 dev_type = entry.get('dev_type')
-                mode = calcPerms(device_map[dev_type],
-                                 entry.get('mode', '0600'))
+                mode = device_map[dev_type] | int(entry.get('mode', '0600'), 8)
                 if dev_type in ['block', 'char']:
                     # check if major/minor are properly specified
                     if (entry.get('major') == None or
@@ -906,11 +886,9 @@ class POSIX(Bcfg2.Client.Tools.Tool):
 
         configOwner = str(normUid(entry))
         configGroup = str(normGid(entry))
+        configPerms = int(entry.get('perms'), 8)
         if entry.get('dev_type'):
-            configPerms = calcPerms(device_map[entry.get('dev_type')],
-                                    entry.get('perms'))
-        else:
-            configPerms = entry.get('perms')
+            configPerms |= device_map[entry.get('dev_type')]
         if has_selinux:
             if entry.get("secontext") == "__default__":
                 configContext = selinux.matchpathcon(path, 0)[1]
@@ -934,7 +912,7 @@ class POSIX(Bcfg2.Client.Tools.Tool):
                           "Current group is %s but should be %s" %
                           (path, ondisk.st_gid, entry.get('group')))
 
-        if perms != configPerms:
+        if perms != oct(configPerms):
             if checkonly:
                 return False
             entry.set('current_perms', perms)
@@ -954,7 +932,7 @@ class POSIX(Bcfg2.Client.Tools.Tool):
 
         if errors:
             for error in errors:
-                self.logger.debug(msg)
+                self.logger.debug(error)
             entry.set('qtext', "\n".join([entry.get('qtext', '')] + errors))
             return False
         else:
@@ -962,15 +940,16 @@ class POSIX(Bcfg2.Client.Tools.Tool):
 
     def _verify_secontext(self, entry):
         if not secontextMatches(entry):
+            path = entry.get("name")
             if entry.get("secontext") == "__default__":
                 configContext = selinux.matchpathcon(path, 0)[1]
             else:
                 configContext = entry.get("secontext")
-            pcontext = selinux.getfilecon(entry.get('name'))[1]
+            pcontext = selinux.getfilecon(path)[1]
             entry.set('current_secontext', pcontext)
             msg = ("SELinux context for path %s is incorrect. "
                    "Current context is %s but should be %s" %
-                   (entry.get("name"), pcontext, configContext))
+                   (path, pcontext, configContext))
             self.logger.debug(msg)
             entry.set('qtext', "\n".join([entry.get("qtext", ''), msg]))
             return False
